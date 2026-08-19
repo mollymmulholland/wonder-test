@@ -32,14 +32,15 @@
       <label class="full">Absolute non-negotiables<textarea id="nonnegotiables" placeholder="Anything Wonder should never compromise on when introducing someone?"></textarea></label>
     </div><div class="actions"><button class="ghost" data-back="birth">Back</button><button class="primary" id="essentialsContinue">Continue</button></div></div></section>
 
-    <section class="screen" id="visual"><div class="panel wide"><div class="eyebrow">Part III · Presence</div><h2>Give Wonder a visual reference.</h2><p class="muted">For this preview, images stay only on this device. In production, visual data will support attraction matching and profile presentation. Psychological conclusions are not generated from your face in this preview.</p>
+    <section class="screen" id="visual"><div class="panel wide"><div class="eyebrow">Part III · Presence</div><h2>Give Wonder a visual reference.</h2><p class="muted">For this preview, selected images stay only in this browser tab and are never uploaded. You may also skip this step and continue directly to the assessment.</p>
       <div class="capture-grid">
-        <label class="capture-card"><span>01 · Front</span><strong>Neutral, natural light</strong><input class="photoInput" data-slot="front" type="file" accept="image/*" capture="user"><div class="photoPreview" id="preview-front">Add photo</div></label>
-        <label class="capture-card"><span>02 · Three-quarter</span><strong>Slight turn</strong><input class="photoInput" data-slot="angle" type="file" accept="image/*" capture="user"><div class="photoPreview" id="preview-angle">Add photo</div></label>
-        <label class="capture-card"><span>03 · Expression</span><strong>Natural smile</strong><input class="photoInput" data-slot="smile" type="file" accept="image/*" capture="user"><div class="photoPreview" id="preview-smile">Add photo</div></label>
+        <label class="capture-card"><span>01 · Front</span><strong>Neutral, natural light</strong><input class="photoInput" data-slot="front" type="file" accept="image/*"><div class="photoPreview" id="preview-front">Add photo</div></label>
+        <label class="capture-card"><span>02 · Three-quarter</span><strong>Slight turn</strong><input class="photoInput" data-slot="angle" type="file" accept="image/*"><div class="photoPreview" id="preview-angle">Add photo</div></label>
+        <label class="capture-card"><span>03 · Expression</span><strong>Natural smile</strong><input class="photoInput" data-slot="smile" type="file" accept="image/*"><div class="photoPreview" id="preview-smile">Add photo</div></label>
       </div>
-      <label class="consent-row"><input id="visualConsent" type="checkbox"><span>I understand this preview stores selected images only in my browser and does not upload them to a server.</span></label>
-      <div class="actions"><button class="ghost" data-back="essentials">Back</button><button class="primary" id="visualContinue">Begin assessment</button></div></div></section>
+      <p class="muted" id="visualStatus">Optional for this preview. You can continue without photos.</p>
+      <label class="consent-row"><input id="visualConsent" type="checkbox"><span>I understand selected images are used only for this active preview session and are not uploaded.</span></label>
+      <div class="actions"><button class="ghost" data-back="essentials">Back</button><div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end"><button class="ghost" id="skipVisual">Skip for now</button><button class="primary" id="visualContinue">Begin assessment</button></div></div></div></section>
 
     <section class="screen" id="assessment"><div class="assessment-wrap"><div class="progress"><span id="progressBar"></span></div><div class="eyebrow" id="sectionLabel">Instinct</div><div id="questionMount"></div><div class="actions question-actions"><button class="ghost" id="prevQuestion">Back</button><button class="primary" id="nextQuestion">Continue</button></div></div></section>
 

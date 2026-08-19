@@ -2,8 +2,16 @@
   const $=id=>document.getElementById(id);
   const state=()=>{try{return JSON.parse(localStorage.getItem('wonder_preview_state')||'{}')}catch{return {}}};
   const save=s=>{try{localStorage.setItem('wonder_preview_state',JSON.stringify(s))}catch{}};
-  const email=$('accountEmail'),phone=$('accountPhone'),password=$('accountPassword'),btn=$('accountContinue'),status=$('accountStatus'),toggle=$('accountModeToggle');
+  const email=$('accountEmail'),phone=$('accountPhone'),password=$('accountPassword'),btn=$('accountContinue'),status=$('accountStatus');
   if(!email||!phone||!password||!btn)return;
+
+  let toggle=$('accountModeToggle');
+  if(!toggle){
+    toggle=document.createElement('button');
+    toggle.id='accountModeToggle';toggle.type='button';toggle.className='account-mode-toggle';toggle.textContent='Already have an account? Sign in';
+    const actions=btn.closest('.actions');if(actions)actions.insertAdjacentElement('afterend',toggle);
+    const style=document.createElement('style');style.textContent='.account-mode-toggle{display:block;margin:18px auto 0;border:0;background:transparent;color:inherit;font:inherit;font-size:13px;letter-spacing:.04em;text-decoration:underline;text-underline-offset:4px;opacity:.68;padding:8px}.account-mode-toggle:active{opacity:1}';document.head.appendChild(style);
+  }
 
   let mode='create';
   const phoneLabel=phone.closest('label');
@@ -17,10 +25,10 @@
     mode=next;
     if(phoneLabel)phoneLabel.style.display=mode==='signin'?'none':'';
     btn.textContent=mode==='signin'?'Sign in':'Create account';
-    if(toggle)toggle.textContent=mode==='signin'?'New to Wonder? Create an account':'Already have an account? Sign in';
+    toggle.textContent=mode==='signin'?'New to Wonder? Create an account':'Already have an account? Sign in';
     showStatus('');
   }
-  if(toggle)toggle.onclick=()=>setMode(mode==='signin'?'create':'signin');
+  toggle.onclick=()=>setMode(mode==='signin'?'create':'signin');
 
   function saveSession(data,{fallbackEmail='',fallbackPhone=''}={}){
     const current=state(),u=data.user||{};

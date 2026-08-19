@@ -1,6 +1,7 @@
 const RAW_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_URL = String(RAW_SUPABASE_URL || '').replace(/\/(?:rest|auth)\/v1\/?$/,'').replace(/\/$/,'');
 const SUPABASE_SECRET = process.env.SUPABASE_SECRET_KEY;
+const SUPABASE_PUBLIC = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const ADMIN_TOKEN = process.env.WONDER_ADMIN_TOKEN;
 
 function maskEmail(email='') {
@@ -10,12 +11,12 @@ function maskEmail(email='') {
   return `${head}${name && name.length > 2 ? '***' : ''}@${domain}`;
 }
 
-async function sb(path, options={}) {
+async function request(path, key, options={}) {
   const response = await fetch(`${SUPABASE_URL}${path}`, {
     ...options,
     headers: {
-      apikey: SUPABASE_SECRET,
-      Authorization: `Bearer ${SUPABASE_SECRET}`,
+      apikey: key,
+      Authorization: `Bearer ${key}`,
       'Content-Type': 'application/json',
       ...(options.headers || {})
     }
@@ -23,13 +24,18 @@ async function sb(path, options={}) {
   const text = await response.text();
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch { data = text; }
-  if (!response.ok) {
-    const err = new Error(`Supabase ${response.status}`);
-    err.status = response.status;
-    err.data = data;
+  return { ok: response.ok, status: response.status, data, headers: response.headers };
+}
+
+async function sb(path, options={}) {
+  const r = await request(path, SUPABASE_SECRET, options);
+  if (!r.ok) {
+    const err = new Error(`Supabase ${r.status}`);
+    err.status = r.status;
+    err.data = r.data;
     throw err;
   }
-  return { data, headers: response.headers };
+  return r;
 }
 
 module.exports = async function handler(req, res) {
@@ -51,6 +57,7 @@ module.exports = async function handler(req, res) {
   }
 
   try {
+    const publicHealth = SUPABASE_PUBLIC ? await request('/auth/v1/settings', SUPABASE_PUBLIC) : { ok:false, status:null, data:null };
     const usersResp = await sb('/auth/v1/admin/users?page=1&per_page=20');
     const rawUsers = Array.isArray(usersResp.data?.users) ? usersResp.data.users : (Array.isArray(usersResp.data) ? usersResp.data : []);
     const users = rawUsers.map(u => ({
@@ -75,8 +82,16 @@ module.exports = async function handler(req, res) {
       ok: true,
       environment: {
         supabase_url_present: !!SUPABASE_URL,
+        public_key_present: !!SUPABASE_PUBLIC,
         secret_present: !!SUPABASE_SECRET,
-        admin_token_present: !!ADMIN_TOKEN
+        admin_token_present: !!ADMIN_TOKEN,
+        normalized_url_changed: String(RAW_SUPABASE_URL || '') !== SUPABASE_URL
+      },
+      public_auth: {
+        reachable: !!publicHealth.ok,
+        status: publicHealth.status,
+        email_signup_enabled: publicHealth.data?.external?.email ?? null,
+        phone_signup_enabled: publicHealth.data?.external?.phone ?? null
       },
       auth_users: users,
       profiles: Array.isArray(profilesResp.data) ? profilesResp.data : [],

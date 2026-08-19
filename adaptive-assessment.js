@@ -3,32 +3,60 @@
  const getState=()=>{try{return JSON.parse(localStorage.getItem('wonder_preview_state')||'{}')}catch{return{}}};
  const getA=()=>{try{return JSON.parse(localStorage.getItem(KEY)||'{}')}catch{return{}}};
  const saveA=a=>localStorage.setItem(KEY,JSON.stringify(a));
- const A=Object.assign({responses:{},history:[],cursor:-1,sessionId:null,complete:false},getA());
- let current=null,selected=null,booted=false;
+ const A=Object.assign({responses:{},history:[],sessionId:null,complete:false,cache:{},changedCounts:{}},getA());
+ let current=null,selected=null,currentMeta={},booted=false,questionShownAt=Date.now();
  const $=id=>document.getElementById(id);
  const authToken=()=>getState()?.auth?.accessToken||null;
  const headers=()=>{const h={'Content-Type':'application/json'};const t=authToken();if(t)h.Authorization=`Bearer ${t}`;return h};
 
  async function startSession(){
-   if(A.sessionId||!authToken())return;
-   try{const r=await fetch('/api/assessment/start',{method:'POST',headers:headers(),body:JSON.stringify({questionnaire_version:'wonder-questionnaire-v2.1'})});if(r.ok){const d=await r.json();A.sessionId=d.session?.id||null;saveA(A)}}catch{}
+   if(!authToken())return;
+   const r=await fetch('/api/assessment/start',{method:'POST',headers:headers(),body:JSON.stringify({questionnaire_version:'wonder-questionnaire-v2.1'})});
+   const d=await r.json().catch(()=>({}));
+   if(!r.ok)throw new Error(d.error||'Wonder could not start your assessment.');
+   const id=d.session?.id||null;
+   if(id){
+     const changedSession=A.sessionId&&A.sessionId!==id;
+     A.sessionId=id;
+     A.responses=d.responses||{};
+     A.complete=false;
+     A.snapshotSyncedAt=null;
+     if(changedSession||d.resumed){A.history=[];A.cache={};}
+     saveA(A);
+   }
  }
+
  async function persist(itemId,response){
-   if(!A.sessionId||!authToken())return;
-   try{await fetch('/api/assessment/respond',{method:'POST',headers:headers(),body:JSON.stringify({session_id:A.sessionId,item_id:itemId,response})})}catch{}
+   if(!A.sessionId||!authToken())return true;
+   const elapsed=Math.max(0,Date.now()-questionShownAt);
+   const r=await fetch('/api/assessment/respond',{
+     method:'POST',headers:headers(),body:JSON.stringify({
+       session_id:A.sessionId,item_id:itemId,response,
+       response_time_ms:elapsed,changed_count:Number(A.changedCounts?.[itemId]||0)
+     })
+   });
+   const d=await r.json().catch(()=>({}));
+   if(!r.ok)throw new Error(d.error||'Wonder could not save that response.');
+   return true;
  }
+
  async function chooseNext(){
    const r=await fetch('/api/assessment/next',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({responses:A.responses})});
-   if(!r.ok)throw new Error('Wonder could not choose the next question.');
-   return r.json();
+   const d=await r.json().catch(()=>({}));
+   if(!r.ok)throw new Error(d.error||'Wonder could not choose the next question.');
+   return d;
  }
+
  function phaseLabel(p){return p==='core'?'Understanding you':p==='precision'?'Looking closer':p==='coverage'?'Filling in the picture':'Assessment'}
- function setProgress(count){const pct=Math.min(96,Math.max(4,(count/28)*82));if($('progressBar'))$('progressBar').style.width=pct+'%'}
+ function setProgress(count,target=32){const pct=Math.min(96,Math.max(4,(count/Math.max(28,target))*88));if($('progressBar'))$('progressBar').style.width=pct+'%'}
  function optionButton(label,i,active=false){return `<button class="option ${active?'selected':''}" data-i="${i}">${label}</button>`}
+ function markChanged(item){if(A.responses[item.id]!==undefined&&JSON.stringify(A.responses[item.id])!==JSON.stringify(selected)){A.changedCounts[item.id]=Number(A.changedCounts[item.id]||0)+1;saveA(A)}}
+
  function render(item,meta={}){
-   current=item;selected=A.responses[item.id]??null;
-   $('sectionLabel').textContent=phaseLabel(meta.phase);
-   setProgress(meta.count||Object.keys(A.responses).length);
+   current=item;currentMeta=meta||{};selected=A.responses[item.id]??null;questionShownAt=Date.now();
+   A.cache=A.cache||{};A.cache[item.id]=item;saveA(A);
+   if($('sectionLabel'))$('sectionLabel').textContent=phaseLabel(meta.phase);
+   setProgress(meta.count||Object.keys(A.responses).length,meta.target_max||32);
    let body='';
    if(item.type==='single')body=`<div class="options">${item.options.map((o,i)=>optionButton(o.label,i,Number(selected)===i)).join('')}</div>`;
    if(item.type==='scale'){
@@ -43,76 +71,118 @@
    $('questionMount').innerHTML=`<div class="question-title">${item.prompt}</div>${body}`;
    bindInputs(item);
    $('prevQuestion').style.visibility=A.history.length?'visible':'hidden';
-   $('nextQuestion').textContent='Continue';
+   $('nextQuestion').style.visibility='visible';$('nextQuestion').textContent='Continue';
    updateContinue(item);
  }
- function bindInputs(item){
-   if(item.type==='single')$('questionMount').querySelectorAll('.option').forEach(el=>el.onclick=()=>{selected=Number(el.dataset.i);render(item,{phase:'core',count:Object.keys(A.responses).length})});
-   if(item.type==='scale')$('questionMount').querySelectorAll('.scale-option').forEach(el=>el.onclick=()=>{selected=Number(el.dataset.v);render(item,{phase:'core',count:Object.keys(A.responses).length})});
-   if(item.type==='multi')$('questionMount').querySelectorAll('.option').forEach(el=>el.onclick=()=>{let arr=Array.isArray(selected)?[...selected]:[];const i=Number(el.dataset.i);if(arr.includes(i))arr=arr.filter(x=>x!==i);else if(arr.length<(item.max||3))arr.push(i);selected=arr;render(item,{phase:'core',count:Object.keys(A.responses).length})});
-   if(item.type==='rank')$('questionMount').querySelectorAll('.option').forEach(el=>el.onclick=()=>{let arr=Array.isArray(selected)?[...selected]:[];const i=Number(el.dataset.i);if(arr.includes(i))arr=arr.filter(x=>x!==i);else if(arr.length<(item.max||5))arr.push(i);selected=arr;render(item,{phase:'core',count:Object.keys(A.responses).length})});
+
+ function rerenderSelection(item){
+   const before=A.responses[item.id];
+   if(before!==undefined&&JSON.stringify(before)!==JSON.stringify(selected))A.changedCounts[item.id]=Number(A.changedCounts[item.id]||0)+1;
+   const keep=selected;
+   render(item,currentMeta);selected=keep;
+   // render reads the persisted answer; replace it visually with the current unsaved selection.
+   if(item.type==='single')$('questionMount').querySelectorAll('.option').forEach(el=>el.classList.toggle('selected',Number(el.dataset.i)===Number(keep)));
+   if(item.type==='scale')$('questionMount').querySelectorAll('.scale-option').forEach(el=>el.classList.toggle('selected',Number(el.dataset.v)===Number(keep)));
+   if(item.type==='multi'||item.type==='rank'){
+     const arr=Array.isArray(keep)?keep:[];$('questionMount').querySelectorAll('.option').forEach(el=>el.classList.toggle('selected',arr.includes(Number(el.dataset.i))));
+     if(item.type==='rank'){const summary=$('questionMount').querySelector('.rank-summary');if(summary)summary.innerHTML=arr.length?arr.map((i,r)=>`<span>${r+1}. ${item.options[i].label}</span>`).join(''):'Your ranking will appear here.';}
+   }
+   selected=keep;updateContinue(item);saveA(A);
  }
+
+ function bindInputs(item){
+   if(item.type==='single')$('questionMount').querySelectorAll('.option').forEach(el=>el.onclick=()=>{selected=Number(el.dataset.i);rerenderSelection(item)});
+   if(item.type==='scale')$('questionMount').querySelectorAll('.scale-option').forEach(el=>el.onclick=()=>{selected=Number(el.dataset.v);rerenderSelection(item)});
+   if(item.type==='multi')$('questionMount').querySelectorAll('.option').forEach(el=>el.onclick=()=>{let arr=Array.isArray(selected)?[...selected]:[];const i=Number(el.dataset.i);if(arr.includes(i))arr=arr.filter(x=>x!==i);else if(arr.length<(item.max||3))arr.push(i);selected=arr;rerenderSelection(item)});
+   if(item.type==='rank')$('questionMount').querySelectorAll('.option').forEach(el=>el.onclick=()=>{let arr=Array.isArray(selected)?[...selected]:[];const i=Number(el.dataset.i);if(arr.includes(i))arr=arr.filter(x=>x!==i);else if(arr.length<(item.max||5))arr.push(i);selected=arr;rerenderSelection(item)});
+ }
+
  function valid(item){if(item.type==='single'||item.type==='scale')return selected!==null&&selected!==undefined;if(item.type==='multi')return Array.isArray(selected)&&selected.length>0;if(item.type==='rank')return Array.isArray(selected)&&selected.length===(item.max||5);return false}
  function updateContinue(item){const b=$('nextQuestion');if(b){b.disabled=!valid(item);b.style.opacity=valid(item)?'1':'.45'}}
+ function setSaving(on){const b=$('nextQuestion');if(!b)return;b.disabled=on||!valid(current);b.textContent=on?'Saving…':'Continue';}
 
  async function next(){
    if(!current||!valid(current))return;
-   A.responses[current.id]=selected;await persist(current.id,selected);
-   if(!A.history.length||A.history[A.history.length-1]!==current.id)A.history.push(current.id);
-   saveA(A);
+   setSaving(true);
    try{
+     await persist(current.id,selected);
+     A.responses[current.id]=selected;
+     if(!A.history.length||A.history[A.history.length-1]!==current.id)A.history.push(current.id);
+     saveA(A);
      const n=await chooseNext();
      if(n.complete){await finish(n);return}
      render(n.item,n);
-   }catch(e){$('questionMount').innerHTML=`<div class="question-title">Wonder lost the thread for a moment.</div><p class="muted">Your answers are saved. Try Continue again.</p>`}
+   }catch(e){
+     $('questionMount').insertAdjacentHTML('beforeend',`<p class="muted assessment-error">${String(e.message||'Wonder lost the thread for a moment.')}</p>`);
+     setSaving(false);
+   }
  }
- async function back(){
+
+ function back(){
    if(!A.history.length)return;
-   const last=A.history.pop();
-   const previous=A.history.pop();
-   if(!previous){saveA(A);return}
-   // Ask server for the public item bank indirectly by replaying until the previous id would be current.
-   // We keep a local cache of rendered items for instant navigation.
-   const item=A.cache?.[previous];if(item){saveA(A);render(item,{phase:'core',count:Object.keys(A.responses).length})}
+   const target=A.history.pop();
+   const item=A.cache?.[target];
+   saveA(A);
+   if(item)render(item,{phase:'core',count:Object.keys(A.responses).length,target_max:32});
  }
- function cacheItem(item){A.cache=A.cache||{};A.cache[item.id]=item;saveA(A)}
- const oldRender=render;render=(item,meta)=>{cacheItem(item);oldRender(item,meta)};
 
  function dominant(d,keys){return keys.map(k=>[k,d[k]||0]).sort((a,b)=>b[1]-a[1])[0]}
  const names={cognitive_systemizing:'structured thinking',cognitive_contextual:'context-sensitive thinking',ambiguity_tolerance:'comfort with ambiguity',decisiveness:'decisiveness',novelty_orientation:'novelty',emotional_intensity:'emotional intensity',structure_preference:'structure',autonomy_need:'autonomy',closeness_need:'closeness',reassurance_need:'relational reassurance',vulnerability_openness:'vulnerability',conflict_directness:'directness in conflict',repair_orientation:'repair',reciprocity_sensitivity:'reciprocity',trust_baseline:'baseline trust',value_family:'family',value_achievement:'achievement',value_meaning:'meaning',value_freedom:'freedom',value_stability:'stability',value_knowledge:'knowledge',value_service:'service',value_influence:'influence',value_beauty:'beauty',value_loyalty:'loyalty',recognition_need:'recognition',competence_identity:'competence',distinctiveness_need:'distinctiveness',belonging_need:'belonging',stress_control:'control',stress_withdrawal:'withdrawal',stress_accommodation:'accommodation',stress_intellectualization:'analysis'};
- function mirrorCopy(model,archetypes){
+ function fallbackMirror(model,archetypes){
    const d=model.dimensions||{};const primary=archetypes[0],secondary=archetypes[1];
    const cog=dominant(d,['cognitive_systemizing','cognitive_contextual','ambiguity_tolerance','decisiveness']);
    const rel=dominant(d,['autonomy_need','closeness_need','repair_orientation','reciprocity_sensitivity','trust_baseline']);
    const val=dominant(d,['value_family','value_achievement','value_meaning','value_freedom','value_stability','value_knowledge','value_service','value_influence','value_beauty','value_loyalty']);
-   const stress=dominant(d,['stress_control','stress_withdrawal','stress_accommodation','stress_intellectualization']);
-   const tension=(d.autonomy_need>.25&&d.reassurance_need>.25)?'You seem to value independence strongly while still registering relational inconsistency quickly. Wonder reads that less as contradiction than as a wish for closeness that does not cost you agency.':(d.closeness_need>.25&&d.stress_withdrawal>.25)?'You appear to care deeply about connection, yet pressure may make you retreat precisely when closeness matters most. That tension is worth understanding rather than flattening into a label.':`Under pressure, ${names[stress[0]]} appears more prominent than it does in your everyday self-description.`;
-   return{primary,secondary,move:`Your responses lean toward ${names[cog[0]]}. You seem most yourself when you can understand what is actually happening rather than accept a shallow explanation.`,drive:`Of the values Wonder measured, ${names[val[0]]} currently carries the strongest signal. That does not mean it rules your life; it means choices involving it are especially likely to feel consequential.`,relationship:`In relationships, ${names[rel[0]]} stands out. The pattern matters more than any single answer because it appeared from several different angles.`,tension};
+   return{primary,secondary,move:`Your responses lean toward ${names[cog[0]]}.`,drive:`Of the values Wonder measured, ${names[val[0]]} currently carries the strongest signal.`,relationship:`In relationships, ${names[rel[0]]} stands out.`,tension:'Wonder is still looking for the most meaningful tension in your profile.'};
  }
+
+ function renderMirror(out){
+   const m=out.mirror||fallbackMirror(out.model||{},out.archetypes||[]);const primary=m.primary||out.archetypes?.[0],secondary=m.secondary||out.archetypes?.[1];
+   $('archetypeName').textContent='The '+(primary?.name||'Unfolding');
+   $('archetypeNote').textContent=`Primary archetype${secondary?.name?` · ${secondary.name} influence`:''}`;
+   $('mirrorMoveTitle').textContent=m.move_title||primary?.essence||'How you make sense of things';$('mirrorMove').textContent=m.move||'';
+   $('mirrorDriveTitle').textContent=m.drive_title||'What carries weight';$('mirrorDrive').textContent=m.drive||'';
+   $('mirrorRelTitle').textContent=m.relationship_title||'How connection works for you';$('mirrorRel').textContent=m.relationship||'';
+   $('mirrorShadowTitle').textContent=m.tension_title||'A tension Wonder noticed';$('mirrorShadow').textContent=m.tension||'';
+   const weak=Array.isArray(m.uncertain)?m.uncertain:Object.entries(out.model?.evidence||{}).sort((a,b)=>a[1]-b[1]).slice(0,3).map(([k])=>names[k]||k);
+   $('mirrorUncertain').textContent=weak.length?`Wonder has less evidence about ${weak.join(', ')}. Those remain open questions rather than settled traits.`:'Wonder has broad coverage, but this Mirror remains revisable as new evidence appears.';
+ }
+
  async function finish(meta){
-   $('progressBar').style.width='100%';
-   $('sectionLabel').textContent='Wonder is looking for patterns';
+   $('progressBar').style.width='100%';$('sectionLabel').textContent='Wonder is looking for patterns';
    $('questionMount').innerHTML='<div class="question-title">Separating what you say about yourself from what your choices suggest.</div>';
    $('nextQuestion').style.visibility='hidden';$('prevQuestion').style.visibility='hidden';
    try{
-     const r=await fetch('/api/assessment-score',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({responses:A.responses})});const out=await r.json();
-     const c=mirrorCopy(out.model,out.archetypes||[]);A.complete=true;A.result=out;saveA(A);
-     const s=getState();s.archetype=c.primary?.name||'Architect';s.assessmentV2=out;localStorage.setItem('wonder_preview_state',JSON.stringify(s));
-     $('archetypeName').textContent='The '+(c.primary?.name||'Architect');
-     $('archetypeNote').textContent=`Primary archetype · ${c.secondary?.name?`with ${c.secondary.name} influence`:''}`;
-     $('mirrorMoveTitle').textContent=c.primary?.essence||'A pattern is emerging.';$('mirrorMove').textContent=c.move;
-     $('mirrorDriveTitle').textContent='What carries weight';$('mirrorDrive').textContent=c.drive;
-     $('mirrorRelTitle').textContent='How connection works for you';$('mirrorRel').textContent=c.relationship;
-     $('mirrorShadowTitle').textContent='A tension Wonder noticed';$('mirrorShadow').textContent=c.tension;
-     const weak=Object.entries(out.model.evidence||{}).sort((a,b)=>a[1]-b[1]).slice(0,3).map(([k])=>names[k]||k);
-     $('mirrorUncertain').textContent=`Wonder has less evidence about ${weak.join(', ')}. Your model should become more precise as you interact with it.`;
-     setTimeout(()=>window.show?window.show('mirror'):document.querySelector('#mirror')?.classList.add('active'),900);
-   }catch{$('questionMount').innerHTML='<div class="question-title">Your answers are safe, but Wonder could not finish the portrait yet.</div>'}
+     let out=null;
+     if(A.sessionId&&authToken()){
+       const r=await fetch('/api/assessment/complete',{method:'POST',headers:headers(),body:JSON.stringify({session_id:A.sessionId})});
+       const d=await r.json().catch(()=>({}));
+       if(r.ok)out=d;else if(r.status!==409)throw new Error(d.error||'Wonder could not finish the portrait yet.');
+     }
+     if(!out){
+       const r=await fetch('/api/assessment-score',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({responses:A.responses})});
+       const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'Wonder could not finish the portrait yet.');out=d;
+     }
+
+     A.complete=true;A.result=out;if(out.snapshot_id)A.snapshotSyncedAt=new Date().toISOString();saveA(A);
+     const s=getState();s.archetype=(out.mirror?.primary?.name||out.archetypes?.[0]?.name||'Unfolding');s.assessmentV2=out;localStorage.setItem('wonder_preview_state',JSON.stringify(s));
+     renderMirror(out);
+     setTimeout(()=>window.show?window.show('mirror'):document.querySelector('#mirror')?.classList.add('active'),700);
+   }catch(e){
+     $('questionMount').innerHTML=`<div class="question-title">Your answers are safe, but Wonder could not finish the portrait yet.</div><p class="muted">${String(e.message||'Try again in a moment.')}</p>`;
+   }
  }
+
  async function boot(){
-   if(booted)return;booted=true;await startSession();
-   try{const n=await chooseNext();if(n.complete){await finish(n);return}render(n.item,n)}catch(e){$('questionMount').innerHTML='<div class="question-title">Wonder could not begin the assessment.</div>'}
+   if(booted)return;booted=true;
+   try{
+     await startSession();
+     const n=await chooseNext();
+     if(n.complete){await finish(n);return}
+     render(n.item,n);
+   }catch(e){$('questionMount').innerHTML=`<div class="question-title">Wonder could not begin the assessment.</div><p class="muted">${String(e.message||'Try again in a moment.')}</p>`;}
  }
+
  const nextBtn=$('nextQuestion'),prevBtn=$('prevQuestion');if(nextBtn)nextBtn.onclick=next;if(prevBtn)prevBtn.onclick=back;
  const observer=new MutationObserver(()=>{if($('assessment')?.classList.contains('active'))boot()});if($('assessment'))observer.observe($('assessment'),{attributes:true,attributeFilter:['class']});
  if($('assessment')?.classList.contains('active'))boot();

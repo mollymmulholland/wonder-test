@@ -5,23 +5,15 @@
   if(!saveBtn)return;
 
   saveBtn.addEventListener('click',async()=>{
-    const s=read();
-    const token=s.auth?.accessToken;
-    if(!token)return;
-    const accuracy=Number(s.accuracy||0);
-    if(!accuracy)return;
+    const s=read();const token=s.auth?.accessToken;if(!token)return;
+    const accuracy=Number(s.accuracy||0);if(!accuracy)return;
     const correction=(document.getElementById('correction')?.value||'').trim();
     const assessment=readAssessment();
     try{
-      await fetch('/api/mirror-feedback',{
+      await fetch('/api/persist',{
         method:'POST',
         headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},
-        body:JSON.stringify({
-          assessment_session_id:assessment.sessionId||null,
-          overall_accuracy:accuracy,
-          correction,
-          archetype_resonance:accuracy
-        }),
+        body:JSON.stringify({action:'mirror_feedback',assessment_session_id:assessment.sessionId||null,overall_accuracy:accuracy,correction,archetype_resonance:accuracy}),
         keepalive:true
       });
     }catch{}

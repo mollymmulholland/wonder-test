@@ -1,7 +1,15 @@
 (()=>{
   const $=id=>document.getElementById(id);
   const previewState=JSON.parse(localStorage.getItem('wonder_preview_state')||'{}');
-  const persist=()=>localStorage.setItem('wonder_preview_state',JSON.stringify(previewState));
+  const persist=()=>{
+    // Never persist image blobs/data URLs. Mobile Safari localStorage is intentionally small.
+    const safe={...previewState};
+    delete safe.photos;
+    try{localStorage.setItem('wonder_preview_state',JSON.stringify(safe));}catch(e){console.warn('Wonder preview state could not be saved',e);}
+  };
+
+  // Image data lives only for this browser tab/session and is never uploaded by this preview.
+  window.wonderPhotoUrls=window.wonderPhotoUrls||{};
 
   const birthBtn=$('birthContinue');
   if(birthBtn){
@@ -28,32 +36,57 @@
     };
   }
 
-  previewState.photos=previewState.photos||{};
   document.querySelectorAll('.photoInput').forEach(input=>{
     const slot=input.dataset.slot;
     const target=$('preview-'+slot);
-    const prior=previewState.photos[slot];
-    if(prior && target){target.style.backgroundImage=`url(${prior})`;target.textContent='';target.classList.add('has-photo');}
     input.addEventListener('change',()=>{
       const file=input.files?.[0];
       if(!file)return;
-      if(file.size>3500000){alert('For this preview, please choose an image under 3.5 MB.');input.value='';return;}
-      const reader=new FileReader();
-      reader.onload=()=>{
-        const data=String(reader.result);
-        previewState.photos[slot]=data;
-        persist();
-        if(target){target.style.backgroundImage=`url(${data})`;target.textContent='';target.classList.add('has-photo');}
-      };
-      reader.readAsDataURL(file);
+      if(!file.type.startsWith('image/')){alert('Please choose an image file.');input.value='';return;}
+
+      // Object URLs avoid base64 expansion and localStorage quota failures on iPhone.
+      const prior=window.wonderPhotoUrls[slot];
+      if(prior) URL.revokeObjectURL(prior);
+      const url=URL.createObjectURL(file);
+      window.wonderPhotoUrls[slot]=url;
+      if(target){
+        target.style.backgroundImage=`url("${url}")`;
+        target.textContent='';
+        target.classList.add('has-photo');
+      }
+      previewState.photoSlots=previewState.photoSlots||{};
+      previewState.photoSlots[slot]=true;
+      persist();
+      updateVisualStatus();
     });
   });
+
+  function updateVisualStatus(){
+    const n=Object.keys(window.wonderPhotoUrls).length;
+    const status=$('visualStatus');
+    if(status) status.textContent=n===0?'Optional for this preview. You can continue without photos.':n===1?'1 of 3 references added.':`${n} of 3 references added.`;
+  }
+  updateVisualStatus();
 
   const visualBtn=$('visualContinue');
   if(visualBtn){
     visualBtn.onclick=()=>{
-      if(!$('visualConsent').checked){alert('Please confirm the local-storage notice before continuing.');return;}
-      previewState.visualConsent=true;persist();show('assessment');$('phaseLabel').textContent='Assessment';
+      const hasPhotos=Object.keys(window.wonderPhotoUrls).length>0;
+      if(hasPhotos && !$('visualConsent').checked){alert('Please confirm the visual-data notice before continuing with selected photos.');return;}
+      previewState.visualConsent=hasPhotos?!!$('visualConsent').checked:false;
+      persist();
+      show('assessment');
+      $('phaseLabel').textContent='Assessment';
+    };
+  }
+
+  const skipVisual=$('skipVisual');
+  if(skipVisual){
+    skipVisual.onclick=()=>{
+      previewState.visualSkipped=true;
+      persist();
+      show('assessment');
+      $('phaseLabel').textContent='Assessment';
     };
   }
 
@@ -83,9 +116,9 @@
     const insightMap={Architect:'You seem most alive when complexity can be shaped into something coherent. You value depth, but not at the cost of self-direction.',Seer:'You appear to notice subtext, pattern, and possibility before most people do. Understanding matters more to you than convention.',Explorer:'Freedom and aliveness seem central to how you orient. You are likely to connect best with people who expand rather than contain you.',Sovereign:'Agency, competence, and influence appear central to your identity. You are likely to respect people who possess a strong center of their own.',Alchemist:'You seem drawn toward intensity, symbolism, and experiences that change you. Surface compatibility is unlikely to satisfy you.',Devotee:'Connection carries unusual psychological weight for you. Loyalty and emotional significance may matter more than novelty alone.',Guardian:'You create safety through consistency and responsibility. Trust likely matters more to you than performance.',Maverick:'You preserve independence even when conformity would make life easier. Authenticity appears to outrank social approval.'};
     $('profileInsight').textContent=insightMap[archetype]||insightMap.Architect;
     $('profileIntent').textContent=e.intent?`${e.intent}${e.nonnegotiables?`. Non-negotiables: ${e.nonnegotiables}`:''}`:'Wonder is still learning what kind of relationship you are building toward.';
-    const photo=previewState.photos?.smile||previewState.photos?.front;
+    const photo=window.wonderPhotoUrls.smile||window.wonderPhotoUrls.front||window.wonderPhotoUrls.angle;
     const photoBox=$('profilePhoto');
-    if(photo){photoBox.style.backgroundImage=`url(${photo})`;photoBox.classList.add('has-profile-photo');photoBox.innerHTML='';}
+    if(photo){photoBox.style.backgroundImage=`url("${photo}")`;photoBox.classList.add('has-profile-photo');photoBox.innerHTML='';}
   }
 
   const profileTile=$('profileTile');

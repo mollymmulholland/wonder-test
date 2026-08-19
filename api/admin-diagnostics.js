@@ -1,4 +1,5 @@
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const RAW_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_URL = String(RAW_SUPABASE_URL || '').replace(/\/(?:rest|auth)\/v1\/?$/,'').replace(/\/$/,'');
 const SUPABASE_SECRET = process.env.SUPABASE_SECRET_KEY;
 const ADMIN_TOKEN = process.env.WONDER_ADMIN_TOKEN;
 

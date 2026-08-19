@@ -7,11 +7,13 @@
   };
 
   const hasAccount=s=>s.account && (s.account.email||s.account.phone);
+  const hasSession=s=>!!(s.auth?.accessToken && s.account?.persistence==='supabase');
   const hasAnswers=s=>s.answers && Object.keys(s.answers).length>0;
   const hasEssentials=s=>s.essentials && Object.values(s.essentials).some(Boolean);
   const hasBirth=s=>s.birth && (s.birth.dob||s.birth.pob||s.birth.tob);
 
   function resumeTarget(s){
+    if(!hasSession(s)) return 'account';
     if(s.completedAssessment){
       if(s.accuracy || s.correction) return 'home';
       return 'mirror';

@@ -6,10 +6,19 @@ module.exports=async function handler(req,res){
   const token=auth.startsWith('Bearer ')?auth.slice(7):'';
   const user=await authUser(token);
   if(!user?.id)return res.status(401).json({error:'Authentication required.'});
+
   try{
-    const version=req.body?.questionnaire_version||'wonder-questionnaire-v2';
-    const rows=await rest('/assessment_sessions?select=*',{method:'POST',accessToken:token,prefer:'return=representation',body:{user_id:user.id,questionnaire_version:version,status:'in_progress'}});
-    return res.status(200).json({session:rows[0]});
+    const version=req.body?.questionnaire_version||'wonder-questionnaire-v2.1';
+    const existing=await rest(`/assessment_sessions?user_id=eq.${encodeURIComponent(user.id)}&questionnaire_version=eq.${encodeURIComponent(version)}&status=eq.in_progress&select=*&order=started_at.desc&limit=1`,{accessToken:token});
+    if(existing?.[0])return res.status(200).json({session:existing[0],resumed:true});
+
+    const rows=await rest('/assessment_sessions?select=*',{
+      method:'POST',
+      accessToken:token,
+      prefer:'return=representation',
+      body:{user_id:user.id,questionnaire_version:version,status:'in_progress'}
+    });
+    return res.status(200).json({session:rows[0],resumed:false});
   }catch(e){
     console.error('assessment start',e);
     return res.status(500).json({error:'Unable to start assessment.'});

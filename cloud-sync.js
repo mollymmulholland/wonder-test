@@ -37,7 +37,7 @@
   if(!document.querySelector('link[href="adaptive-assessment.css"]')){
     const link=document.createElement('link');link.rel='stylesheet';link.href='adaptive-assessment.css';document.head.appendChild(link);
   }
-  for(const src of ['adaptive-assessment.js','ux-polish.js','feedback-sync.js','matches-v2.js','mirror-v2.js']){
+  for(const src of ['adaptive-assessment.js','assessment-completion-sync.js','ux-polish.js','feedback-sync.js','matches-v2.js','mirror-v2.js']){
     if(!document.querySelector(`script[src="${src}"]`)){
       const script=document.createElement('script');script.src=src;script.defer=true;document.body.appendChild(script);
     }

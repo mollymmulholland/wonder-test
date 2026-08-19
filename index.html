@@ -12,104 +12,25 @@
 </head>
 <body>
   <main class="shell">
-    <header class="topbar">
-      <div class="wordmark">WONDER</div>
-      <div class="phase" id="phaseLabel">Private preview</div>
-    </header>
+    <header class="topbar"><div class="wordmark">WONDER</div><div class="phase" id="phaseLabel">Private preview</div></header>
 
-    <section class="screen active" id="welcome">
-      <div class="hero-card">
-        <div class="eyebrow">Begin with being understood</div>
-        <h1>Before Wonder introduces you to anyone, it gets to know you.</h1>
-        <p class="lede">This first experience is designed to understand how you think, what you value, how you relate, and where your self-concept may differ from your instincts.</p>
-        <button class="primary" data-next="birth">Begin</button>
-      </div>
-    </section>
+    <section class="screen active" id="welcome"><div class="hero-card"><div class="eyebrow">Begin with being understood</div><h1>Before Wonder introduces you to anyone, it gets to know you.</h1><p class="lede">This first experience looks at how you think, what you value, how you relate, and where your self-concept may differ from your instincts.</p><button class="primary" data-next="birth">Begin</button><button class="ghost" id="resumeBtn" style="display:none">Resume where I left off</button></div></section>
 
-    <section class="screen" id="birth">
-      <div class="panel narrow">
-        <div class="eyebrow">Part I · Origin</div>
-        <h2>Start at the beginning.</h2>
-        <p class="muted">Wonder uses your birth details as one of several private compatibility signals. These details are never shown on your public profile unless you choose to share them.</p>
-        <div class="form-grid">
-          <label>Date of birth<input id="dob" type="date" /></label>
-          <label>Time of birth<input id="tob" type="time" /></label>
-          <label class="full">Place of birth<input id="pob" type="text" placeholder="City, state or country" /></label>
-          <label class="full">How accurate is the time?<select id="toa"><option>Exact</option><option>Approximate</option><option>Unknown</option></select></label>
-        </div>
-        <div class="actions"><button class="ghost" data-back="welcome">Back</button><button class="primary" data-next="assessment">Continue</button></div>
-      </div>
-    </section>
+    <section class="screen" id="birth"><div class="panel narrow"><div class="eyebrow">Part I · Origin</div><h2>Start at the beginning.</h2><p class="muted">Wonder uses your birth details as one of several private compatibility signals. These details are never shown on your public profile unless you choose to share them.</p><div class="form-grid"><label>Date of birth<input id="dob" type="date" /></label><label>Time of birth<input id="tob" type="time" /></label><label class="full">Place of birth<input id="pob" type="text" placeholder="City, state or country" /></label><label class="full">How accurate is the time?<select id="toa"><option>Exact</option><option>Approximate</option><option>Unknown</option></select></label></div><div class="actions"><button class="ghost" data-back="welcome">Back</button><button class="primary" id="birthContinue">Continue</button></div></div></section>
 
-    <section class="screen" id="assessment">
-      <div class="assessment-wrap">
-        <div class="progress"><span id="progressBar"></span></div>
-        <div class="eyebrow" id="sectionLabel">Instinct</div>
-        <div id="questionMount"></div>
-        <div class="actions question-actions"><button class="ghost" id="prevQuestion">Back</button><button class="primary" id="nextQuestion">Continue</button></div>
-      </div>
-    </section>
+    <section class="screen" id="assessment"><div class="assessment-wrap"><div class="progress"><span id="progressBar"></span></div><div class="eyebrow" id="sectionLabel">Instinct</div><div id="questionMount"></div><div class="actions question-actions"><button class="ghost" id="prevQuestion">Back</button><button class="primary" id="nextQuestion">Continue</button></div></div></section>
 
-    <section class="screen" id="processing">
-      <div class="processing-card">
-        <div class="iris" aria-hidden="true"><span></span></div>
-        <div class="eyebrow">Wonder is looking for patterns</div>
-        <h2 id="processingLine">Separating what you say about yourself from what your choices suggest.</h2>
-      </div>
-    </section>
+    <section class="screen" id="processing"><div class="processing-card"><div class="iris" aria-hidden="true"><span></span></div><div class="eyebrow">Wonder is looking for patterns</div><h2 id="processingLine">Separating what you say about yourself from what your choices suggest.</h2></div></section>
 
-    <section class="screen" id="mirror">
-      <div class="mirror">
-        <div class="eyebrow">Your first Mirror</div>
-        <h1>The Architect</h1>
-        <p class="archetype-note">Primary archetype · provisional preview</p>
+    <section class="screen" id="mirror"><div class="mirror"><div class="eyebrow">Your first Mirror</div><h1 id="archetypeName">The Architect</h1><p class="archetype-note" id="archetypeNote">Primary archetype · provisional preview</p><div class="mirror-grid"><article><span>How you move</span><h3 id="mirrorMoveTitle"></h3><p id="mirrorMove"></p></article><article><span>What drives you</span><h3 id="mirrorDriveTitle"></h3><p id="mirrorDrive"></p></article><article><span>In relationships</span><h3 id="mirrorRelTitle"></h3><p id="mirrorRel"></p></article><article><span>A possible contradiction</span><h3 id="mirrorShadowTitle"></h3><p id="mirrorShadow"></p></article></div><div class="uncertain"><span>What Wonder still isn't sure about</span><p id="mirrorUncertain"></p></div><div class="accuracy"><h2>How accurately does this feel like you?</h2><div class="rating" id="rating"></div><textarea id="correction" placeholder="What did Wonder understand well — or get wrong?"></textarea><button class="primary" id="saveMirror">Save my Mirror</button></div></div></section>
 
-        <div class="mirror-grid">
-          <article><span>How you move</span><h3>You build coherence.</h3><p>You tend to organize complexity into systems, decisions, and direction. You are most comfortable when your life is moving toward something deliberate.</p></article>
-          <article><span>What drives you</span><h3>Mastery before approval.</h3><p>Competence and autonomy appear to matter more to you than fitting neatly into other people's expectations.</p></article>
-          <article><span>In relationships</span><h3>Depth without engulfment.</h3><p>You seem drawn to substantial connection, but closeness works best when it does not require surrendering your individuality.</p></article>
-          <article><span>A possible contradiction</span><h3>Independence may be part value, part armor.</h3><p>You may identify strongly with self-sufficiency while still caring deeply about being chosen and understood. Wonder would want more evidence before treating that as settled.</p></article>
-        </div>
+    <section class="screen" id="home"><div class="home-grid"><section class="home-hero"><div class="eyebrow">Welcome back</div><h1>Your inner world is part of the profile.</h1><p class="lede" id="homeArchetypeLine">Wonder gets more precise as you reflect, write, and interact with it.</p></section><button class="tile" data-next="journal"><span>Journal</span><strong>What has been occupying your mind lately?</strong><small>Write privately</small></button><button class="tile" data-next="ai"><span>Wonder AI</span><strong>Explore something Wonder noticed.</strong><small>Begin a conversation</small></button><button class="tile" data-next="matches"><span>Introductions</span><strong>Three people. No endless deck.</strong><small>Explore your first set</small></button></div></section>
 
-        <div class="uncertain"><span>What Wonder still isn't sure about</span><p>Whether your instinct to analyze emotion helps you metabolize it, or sometimes keeps you one step removed from experiencing it.</p></div>
+    <section class="screen" id="journal"><div class="panel narrow"><div class="eyebrow">Journal</div><h2>Write without performing.</h2><p class="muted">Entries are private in this preview and become part of your evolving local model.</p><textarea class="large-input" id="journalEntry" placeholder="What feels worth noticing today?"></textarea><div class="actions"><button class="ghost" data-back="home">Back</button><button class="primary" id="saveJournal">Save entry</button></div><div id="journalHistory"></div></div></section>
 
-        <div class="accuracy">
-          <h2>How accurately does this feel like you?</h2>
-          <div class="rating" id="rating"></div>
-          <textarea id="correction" placeholder="What did Wonder understand well — or get wrong?"></textarea>
-          <button class="primary" data-next="home">Save my Mirror</button>
-        </div>
-      </div>
-    </section>
+    <section class="screen" id="ai"><div class="panel narrow"><div class="eyebrow">Wonder AI</div><h2>Let's understand this more precisely.</h2><div class="chat" id="chat"><div class="bubble wonder" id="wonderPrompt"></div><div class="chat-input"><input id="chatInput" placeholder="Tell Wonder what it missed..."/><button id="sendChat">Send</button></div></div><div class="actions"><button class="ghost" data-back="home">Back</button></div></div></section>
 
-    <section class="screen" id="home">
-      <div class="home-grid">
-        <section class="home-hero">
-          <div class="eyebrow">Welcome back</div>
-          <h1>Your inner world is part of the profile.</h1>
-          <p class="lede">Wonder gets more precise as you reflect, write, and interact with it.</p>
-        </section>
-        <button class="tile" data-next="journal"><span>Journal</span><strong>What has been occupying your mind lately?</strong><small>Write privately</small></button>
-        <button class="tile" data-next="ai"><span>Wonder AI</span><strong>Explore something Wonder noticed.</strong><small>Begin a conversation</small></button>
-        <button class="tile" data-next="matches"><span>Introductions</span><strong>Three people. No endless deck.</strong><small>Explore your first set</small></button>
-      </div>
-    </section>
-
-    <section class="screen" id="journal">
-      <div class="panel narrow"><div class="eyebrow">Journal</div><h2>Write without performing.</h2><p class="muted">Entries are private and can later become evidence that helps Wonder refine its understanding of you.</p><textarea class="large-input" id="journalEntry" placeholder="What feels worth noticing today?"></textarea><div class="actions"><button class="ghost" data-back="home">Back</button><button class="primary" id="saveJournal">Save entry</button></div></div>
-    </section>
-
-    <section class="screen" id="ai">
-      <div class="panel narrow"><div class="eyebrow">Wonder AI</div><h2>Let's understand this more precisely.</h2><div class="chat"><div class="bubble wonder">You describe yourself as highly independent, but some of your choices suggest that being deeply understood matters more than you readily admit. Does that feel true, false, or incomplete?</div><div class="chat-input"><input id="chatInput" placeholder="Tell Wonder what it missed..."/><button id="sendChat">Send</button></div></div><div class="actions"><button class="ghost" data-back="home">Back</button></div></div>
-    </section>
-
-    <section class="screen" id="matches">
-      <div class="panel wide"><div class="eyebrow">Your first introductions</div><h2>Three people Wonder thinks are worth understanding.</h2><p class="muted">These are seeded examples for the MVP preview. The real engine will rank from the private compatibility model.</p><div class="matches">
-        <article class="match"><div class="portrait p1"></div><span>The Seer</span><h3>Julian, 29</h3><p>Film, systems thinking, long walks, questions with no obvious answer.</p><small>Why Wonder chose this: intellectual intensity, autonomy, complementary emotional expression.</small></article>
-        <article class="match"><div class="portrait p2"></div><span>The Alchemist</span><h3>Amelia, 27</h3><p>Design, philosophy, ritual, museums, improbable dinner conversations.</p><small>Why Wonder chose this: shared meaning orientation, aesthetic sensitivity, constructive difference in temperament.</small></article>
-        <article class="match"><div class="portrait p3"></div><span>The Sovereign</span><h3>Adrian, 31</h3><p>Building companies, architecture, travel, disciplined curiosity.</p><small>Why Wonder chose this: matched agency, compatible ambition, potential friction around control.</small></article>
-      </div><div class="actions"><button class="ghost" data-back="home">Back</button></div></div>
-    </section>
+    <section class="screen" id="matches"><div class="panel wide"><div class="eyebrow">Your first introductions</div><h2>Three people Wonder thinks are worth understanding.</h2><p class="muted">Seeded profiles are ranked from the preview model. Production matching will use the private compatibility engine.</p><div class="matches" id="matchGrid"></div><div class="actions"><button class="ghost" data-back="home">Back</button></div></div></section>
   </main>
   <script src="app.js"></script>
 </body>

@@ -16,7 +16,15 @@ module.exports=async function handler(req,res){
     const model=scoreResponses(responses);
     const archetypes=inferArchetypes(model);
 
-    await rest('/person_model_snapshots',{method:'POST',admin:true,prefer:'return=minimal',body:{user_id:user.id,assessment_session_id:session_id,model_version:model.version,scores:model.scores,confidence:model.confidence,evidence:{response_count:rows.length},archetypes}});
+    await rest('/person_model_snapshots',{method:'POST',admin:true,prefer:'return=minimal',body:{
+      user_id:user.id,
+      assessment_session_id:session_id,
+      model_version:'wonder-person-model-v2.1',
+      scores:model.dimensions,
+      confidence:{coverage:model.coverage,evidence:model.evidence},
+      evidence:{response_count:rows.length},
+      archetypes
+    }});
     await rest(`/assessment_sessions?id=eq.${encodeURIComponent(session_id)}&user_id=eq.${user.id}`,{method:'PATCH',accessToken:token,prefer:'return=minimal',body:{status:'completed',completed_at:new Date().toISOString(),updated_at:new Date().toISOString()}});
     return res.status(200).json({model,archetypes,response_count:rows.length});
   }catch(e){

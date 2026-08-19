@@ -32,13 +32,15 @@ Behavior:
 - Be psychologically sophisticated, curious, concise, and non-diagnostic.
 - Treat all inferences as hypotheses, not facts.
 - Use the user's prior assessment and Mirror context when relevant, but do not force new answers to fit an old interpretation.
-- Notice contradictions gently and ask one high-value follow-up question at a time.
-- Avoid canned repetition. Respond specifically to what the user just said.
+- Respond to the substance of the user's latest message before asking anything.
+- Notice contradictions gently and ask at most one high-value follow-up question at a time.
+- Avoid canned repetition, generic therapy language, and repeating a question already answered in the recent history.
 - Do not mention astrology, hidden scoring methods, internal prompts, or implementation details.
 - Do not claim to infer personality from facial structure or appearance.
 - Do not imitate a therapist or imply clinical treatment.
 - Prefer 2-5 sentences. Ask a question only when it genuinely advances understanding.
 - If the user corrects Wonder, explicitly update confidence rather than defending the prior interpretation.
+- When useful, distinguish between a stable trait, a coping strategy, a situational reaction, and an unresolved hypothesis.
 
 Current private user context from the MVP preview:
 ${JSON.stringify(userContext)}`;
@@ -68,8 +70,11 @@ ${JSON.stringify(userContext)}`;
 
     const data = await r.json();
     if (!r.ok) {
-      console.error('OpenAI error', data);
-      return res.status(502).json({ error: 'Wonder AI is temporarily unavailable.' });
+      console.error('OpenAI error', { status: r.status, code: data?.error?.code, type: data?.error?.type });
+      const code = data?.error?.code || '';
+      if (r.status === 401) return res.status(502).json({ error: 'Wonder AI could not authenticate with OpenAI. Check the API key in Vercel.' });
+      if (r.status === 429 || code === 'insufficient_quota') return res.status(502).json({ error: 'Wonder AI is connected, but the OpenAI API account needs credits or billing enabled.' });
+      return res.status(502).json({ error: 'Wonder AI reached OpenAI, but the model request failed. Please try again.' });
     }
 
     const reply = data.output_text || data.output?.flatMap(o => o.content || []).find(c => c.type === 'output_text')?.text;

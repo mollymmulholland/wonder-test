@@ -124,5 +124,29 @@
   const profileTile=$('profileTile');
   if(profileTile){profileTile.onclick=()=>{buildProfile();show('profile');$('phaseLabel').textContent='Your portrait';};}
 
+  // Resume is derived from actual saved progress rather than state.screen because
+  // app.js intentionally renders the welcome screen on page load.
+  const resumeBtn=$('resumeBtn');
+  if(resumeBtn){
+    const hasAnswers=s=>s.answers&&Object.keys(s.answers).length>0;
+    const hasEssentials=s=>s.essentials&&Object.values(s.essentials).some(Boolean);
+    const hasBirth=s=>s.birth&&(s.birth.dob||s.birth.pob||s.birth.tob);
+    const targetFor=s=>{
+      if(s.completedAssessment) return (s.accuracy||s.correction)?'home':'mirror';
+      if(hasAnswers(s)||Number(s.qi||0)>0) return 'assessment';
+      if(hasEssentials(s)) return 'visual';
+      if(hasBirth(s)) return 'essentials';
+      return 'birth';
+    };
+    const meaningful=hasBirth(previewState)||hasEssentials(previewState)||hasAnswers(previewState)||previewState.completedAssessment;
+    resumeBtn.style.display=meaningful?'inline-flex':'none';
+    resumeBtn.onclick=()=>{
+      const target=targetFor(previewState);
+      if(target==='assessment'&&typeof renderQ==='function') renderQ();
+      if(target==='mirror'&&typeof buildMirror==='function') buildMirror();
+      show(target);
+    };
+  }
+
   window.addEventListener('storage',restoreIntake);
 })();

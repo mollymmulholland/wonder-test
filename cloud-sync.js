@@ -1,5 +1,6 @@
 (()=>{
   const read=()=>{try{return JSON.parse(localStorage.getItem('wonder_preview_state')||'{}')}catch{return {}}};
+  const readPlaces=()=>{try{return JSON.parse(localStorage.getItem('wonder_place_meta')||'{}')}catch{return {}}};
   let timer=null;
 
   async function syncNow(){
@@ -10,7 +11,7 @@
       const r=await fetch('/api/persist',{
         method:'POST',
         headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},
-        body:JSON.stringify({birth:s.birth||null,essentials:s.essentials||null,answers:s.answers||null})
+        body:JSON.stringify({birth:s.birth||null,essentials:s.essentials||null,answers:s.answers||null,places:readPlaces()})
       });
       const data=await r.json().catch(()=>({}));
       if(!r.ok) throw new Error(data.error||'Sync failed');
@@ -26,7 +27,7 @@
 
   function schedule(){clearTimeout(timer);timer=setTimeout(syncNow,250);}
   document.addEventListener('click',e=>{
-    if(e.target.closest('#birthContinue,#essentialsContinue,#nextQuestion,.option,#visualContinue,#skipVisual')) schedule();
+    if(e.target.closest('#birthContinue,#essentialsContinue,#nextQuestion,.option,#visualContinue,#skipVisual,.wonder-place-option')) schedule();
   },true);
   window.addEventListener('focus',schedule);
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')schedule();});

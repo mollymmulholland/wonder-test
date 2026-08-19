@@ -8,6 +8,18 @@
   };
   const setState=s=>{try{localStorage.setItem('wonder_preview_state',JSON.stringify(s))}catch{}}
 
+  // Migrate away from the old scripted-demo conversation so the live model
+  // does not inherit repetitive canned replies as if they were real history.
+  const bootState=getState();
+  if(bootState.chatMode!=='live-openai-v1'){
+    if(Array.isArray(bootState.chat)&&bootState.chat.length){
+      bootState.legacyScriptedChat=bootState.chat.slice(-20);
+    }
+    bootState.chat=[];
+    bootState.chatMode='live-openai-v1';
+    setState(bootState);
+  }
+
   function addBubble(text, role){
     const bubble=document.createElement('div');
     bubble.className=`bubble ${role==='wonder'?'wonder':'user'}`;
@@ -56,6 +68,7 @@
       pending.textContent=data.reply;
       pending.style.opacity='1';
       state.chat.push({role:'user',text:message},{role:'wonder',text:data.reply});
+      state.chatMode='live-openai-v1';
       setState(state);
     }catch(err){
       pending.textContent=err.message||'Wonder AI is temporarily unavailable.';

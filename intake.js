@@ -1,9 +1,16 @@
 (()=>{
   const $=id=>document.getElementById(id);
-  const previewState=JSON.parse(localStorage.getItem('wonder_preview_state')||'{}');
+  const readState=()=>{try{return JSON.parse(localStorage.getItem('wonder_preview_state')||'{}')}catch{return {}}};
+  const previewState=readState();
   const persist=()=>{
+    // Merge with the latest stored state so account/auth created after this script loaded
+    // are never erased by later Origin / Essentials saves.
+    const latest=readState();
+    const safe={...latest,...previewState};
+    if(latest.account) safe.account=latest.account;
+    if(latest.auth) safe.auth=latest.auth;
+    if(latest.cloud) safe.cloud=latest.cloud;
     // Never persist image blobs/data URLs. Mobile Safari localStorage is intentionally small.
-    const safe={...previewState};
     delete safe.photos;
     try{localStorage.setItem('wonder_preview_state',JSON.stringify(safe));}catch(e){console.warn('Wonder preview state could not be saved',e);}
   };
@@ -91,18 +98,20 @@
   }
 
   const restoreIntake=()=>{
-    const b=previewState.birth||{};
+    const current=readState();
+    const b=current.birth||{};
     if($('dob'))$('dob').value=b.dob||'';
     if($('tob'))$('tob').value=b.tob||'';
     if($('pob'))$('pob').value=b.pob||'';
     if($('toa'))$('toa').value=b.toa||'Exact';
-    if($('visualConsent'))$('visualConsent').checked=!!previewState.visualConsent;
+    if($('visualConsent'))$('visualConsent').checked=!!current.visualConsent;
   };
   restoreIntake();
 
   function buildProfile(){
-    const e=previewState.essentials||{};
-    const archetype=previewState.archetype||'Architect';
+    const current=readState();
+    const e=current.essentials||{};
+    const archetype=current.archetype||'Architect';
     const name=e.firstName||'You';
     $('profileName').textContent=name;
     $('profileArchetype').textContent=`The ${archetype} · Wonder portrait`;
@@ -123,30 +132,6 @@
 
   const profileTile=$('profileTile');
   if(profileTile){profileTile.onclick=()=>{buildProfile();show('profile');$('phaseLabel').textContent='Your portrait';};}
-
-  // Resume is derived from actual saved progress rather than state.screen because
-  // app.js intentionally renders the welcome screen on page load.
-  const resumeBtn=$('resumeBtn');
-  if(resumeBtn){
-    const hasAnswers=s=>s.answers&&Object.keys(s.answers).length>0;
-    const hasEssentials=s=>s.essentials&&Object.values(s.essentials).some(Boolean);
-    const hasBirth=s=>s.birth&&(s.birth.dob||s.birth.pob||s.birth.tob);
-    const targetFor=s=>{
-      if(s.completedAssessment) return (s.accuracy||s.correction)?'home':'mirror';
-      if(hasAnswers(s)||Number(s.qi||0)>0) return 'assessment';
-      if(hasEssentials(s)) return 'visual';
-      if(hasBirth(s)) return 'essentials';
-      return 'birth';
-    };
-    const meaningful=hasBirth(previewState)||hasEssentials(previewState)||hasAnswers(previewState)||previewState.completedAssessment;
-    resumeBtn.style.display=meaningful?'inline-flex':'none';
-    resumeBtn.onclick=()=>{
-      const target=targetFor(previewState);
-      if(target==='assessment'&&typeof renderQ==='function') renderQ();
-      if(target==='mirror'&&typeof buildMirror==='function') buildMirror();
-      show(target);
-    };
-  }
 
   window.addEventListener('storage',restoreIntake);
 })();

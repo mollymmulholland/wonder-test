@@ -38,6 +38,30 @@ async function sb(path, options={}) {
   return r;
 }
 
+async function runSmokeTest() {
+  const email = `wonder-smoke-${Date.now()}@example.com`;
+  const password = `WonderSmoke-${Math.random().toString(36).slice(2)}!9`;
+  let userId = null;
+  try {
+    const created = await sb('/auth/v1/admin/users', {
+      method:'POST',
+      body: JSON.stringify({ email, password, email_confirm:true })
+    });
+    userId = created.data?.id || created.data?.user?.id || null;
+    if (!userId) throw new Error('Smoke user was not created.');
+
+    await new Promise(resolve => setTimeout(resolve, 250));
+    const profile = await sb(`/rest/v1/profiles?user_id=eq.${encodeURIComponent(userId)}&select=user_id,created_at`);
+    const triggerWorked = Array.isArray(profile.data) && profile.data.length === 1;
+
+    return { auth_create:true, trigger_profile_created:triggerWorked };
+  } finally {
+    if (userId) {
+      await request(`/auth/v1/admin/users/${encodeURIComponent(userId)}`, SUPABASE_SECRET, { method:'DELETE' });
+    }
+  }
+}
+
 module.exports = async function handler(req, res) {
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Cache-Control', 'no-store');
@@ -57,6 +81,7 @@ module.exports = async function handler(req, res) {
   }
 
   try {
+    const smoke = req.query?.action === 'smoke' ? await runSmokeTest() : null;
     const publicHealth = SUPABASE_PUBLIC ? await request('/auth/v1/settings', SUPABASE_PUBLIC) : { ok:false, status:null, data:null };
     const usersResp = await sb('/auth/v1/admin/users?page=1&per_page=20');
     const rawUsers = Array.isArray(usersResp.data?.users) ? usersResp.data.users : (Array.isArray(usersResp.data) ? usersResp.data : []);
@@ -80,6 +105,7 @@ module.exports = async function handler(req, res) {
 
     return res.status(200).json({
       ok: true,
+      smoke,
       environment: {
         supabase_url_present: !!SUPABASE_URL,
         public_key_present: !!SUPABASE_PUBLIC,

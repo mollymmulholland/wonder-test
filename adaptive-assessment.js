@@ -50,10 +50,9 @@
  function phaseLabel(p){return p==='core'?'Understanding you':p==='precision'?'Looking closer':p==='coverage'?'Filling in the picture':'Assessment'}
  function setProgress(count,target=32){const pct=Math.min(96,Math.max(4,(count/Math.max(28,target))*88));if($('progressBar'))$('progressBar').style.width=pct+'%'}
  function optionButton(label,i,active=false){return `<button class="option ${active?'selected':''}" data-i="${i}">${label}</button>`}
- function markChanged(item){if(A.responses[item.id]!==undefined&&JSON.stringify(A.responses[item.id])!==JSON.stringify(selected)){A.changedCounts[item.id]=Number(A.changedCounts[item.id]||0)+1;saveA(A)}}
 
- function render(item,meta={}){
-   current=item;currentMeta=meta||{};selected=A.responses[item.id]??null;questionShownAt=Date.now();
+ function render(item,meta={},preserveTimer=false){
+   current=item;currentMeta=meta||{};selected=A.responses[item.id]??null;if(!preserveTimer)questionShownAt=Date.now();
    A.cache=A.cache||{};A.cache[item.id]=item;saveA(A);
    if($('sectionLabel'))$('sectionLabel').textContent=phaseLabel(meta.phase);
    setProgress(meta.count||Object.keys(A.responses).length,meta.target_max||32);
@@ -79,8 +78,7 @@
    const before=A.responses[item.id];
    if(before!==undefined&&JSON.stringify(before)!==JSON.stringify(selected))A.changedCounts[item.id]=Number(A.changedCounts[item.id]||0)+1;
    const keep=selected;
-   render(item,currentMeta);selected=keep;
-   // render reads the persisted answer; replace it visually with the current unsaved selection.
+   render(item,currentMeta,true);selected=keep;
    if(item.type==='single')$('questionMount').querySelectorAll('.option').forEach(el=>el.classList.toggle('selected',Number(el.dataset.i)===Number(keep)));
    if(item.type==='scale')$('questionMount').querySelectorAll('.scale-option').forEach(el=>el.classList.toggle('selected',Number(el.dataset.v)===Number(keep)));
    if(item.type==='multi'||item.type==='rank'){

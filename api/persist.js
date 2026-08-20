@@ -17,21 +17,26 @@ async function hydrate(uid,accessToken){
   ]);
   const profile=profiles?.[0]||null,birth=births?.[0]||null,snapshot=snapshots?.[0]||null,session=sessions?.[0]||null;
   let assessment=null,active=null;
-  if(snapshot){
-    const model={dimensions:snapshot.scores||{},evidence:snapshot.confidence?.evidence||{},coverage:Number(snapshot.confidence?.coverage||0)};
-    const archetypes=Array.isArray(snapshot.archetypes)?snapshot.archetypes:[];
-    assessment={model,archetypes,mirror:buildMirror(model,archetypes),snapshot_id:snapshot.id,assessment_session_id:snapshot.assessment_session_id,model_version:snapshot.model_version,created_at:snapshot.created_at};
-  }
-  if(session){
-    const rows=await request(`/assessment_responses_v2?session_id=eq.${encodeURIComponent(session.id)}&user_id=eq.${uid}&select=item_id,response&order=created_at.asc`,{accessToken});
-    const responses={};for(const row of rows||[])responses[row.item_id]=row.response;
-    active={session,responses};
-  }
+  if(snapshot){const model={dimensions:snapshot.scores||{},evidence:snapshot.confidence?.evidence||{},coverage:Number(snapshot.confidence?.coverage||0)};const archetypes=Array.isArray(snapshot.archetypes)?snapshot.archetypes:[];assessment={model,archetypes,mirror:buildMirror(model,archetypes),snapshot_id:snapshot.id,assessment_session_id:snapshot.assessment_session_id,model_version:snapshot.model_version,created_at:snapshot.created_at};}
+  if(session){const rows=await request(`/assessment_responses_v2?session_id=eq.${encodeURIComponent(session.id)}&user_id=eq.${uid}&select=item_id,response&order=created_at.asc`,{accessToken});const responses={};for(const row of rows||[])responses[row.item_id]=row.response;active={session,responses};}
   return{profile,birth,assessment,active_assessment:active};
 }
 
 async function saveMirrorFeedback(uid,body,accessToken){const accuracy=Number(body.overall_accuracy);if(!Number.isFinite(accuracy)||accuracy<1||accuracy>7)throw new Error('overall_accuracy must be between 1 and 7');let snapshotId=body.person_model_snapshot_id||null,sessionId=body.assessment_session_id||null;if(!snapshotId){const rows=await request(`/person_model_snapshots?user_id=eq.${uid}&select=id,assessment_session_id&order=created_at.desc&limit=1`,{accessToken});snapshotId=rows?.[0]?.id||null;sessionId=sessionId||rows?.[0]?.assessment_session_id||null;}return request('/mirror_feedback',{method:'POST',accessToken,prefer:'return=representation',body:{user_id:uid,person_model_snapshot_id:snapshotId,assessment_session_id:sessionId,overall_accuracy:accuracy,accurate_sections:Array.isArray(body.accurate_sections)?body.accurate_sections:[],inaccurate_sections:Array.isArray(body.inaccurate_sections)?body.inaccurate_sections:[],correction:String(body.correction||'').trim()||null,archetype_resonance:Number.isFinite(Number(body.archetype_resonance))?Number(body.archetype_resonance):null}});}
 async function saveMatchOutcome(uid,b,accessToken){if(!b.candidate_user_id)throw new Error('candidate_user_id is required');const ratingFields=['felt_understood','conversational_ease','attraction','emotional_safety','intellectual_stimulation','values_fit'];const row={user_id:uid,candidate_user_id:b.candidate_user_id,match_id:b.match_id||null,met_in_person:b.met_in_person==null?null:!!b.met_in_person,wanted_second_date:b.wanted_second_date==null?null:!!b.wanted_second_date,rejection_reasons:Array.isArray(b.rejection_reasons)?b.rejection_reasons:[],notes:String(b.notes||'').trim()||null};for(const f of ratingFields){if(b[f]==null){row[f]=null;continue}const n=Number(b[f]);if(!Number.isFinite(n)||n<1||n>7)throw new Error(`${f} must be between 1 and 7`);row[f]=n;}return request('/match_outcomes',{method:'POST',accessToken,prefer:'return=representation',body:row});}
+async function saveConnectionReflection(uid,b,accessToken){
+ if(!b.other_user_id)throw new Error('other_user_id is required');
+ const previous=await request(`/connection_reflections?user_id=eq.${uid}&other_user_id=eq.${encodeURIComponent(b.other_user_id)}&select=encounter_number&order=encounter_number.desc&limit=1`,{accessToken});
+ const encounter=Number(b.encounter_number)||((previous?.[0]?.encounter_number||0)+1),stage=encounter>=5?'established':encounter>=3?'developing':'early';
+ const rate=(k)=>{if(b[k]==null)return null;const n=Number(b[k]);if(!Number.isFinite(n)||n<1||n>7)throw new Error(`${k} must be between 1 and 7`);return n;};
+ const reflection={surprised_by:String(b.surprised_by||'').trim()||null,want_to_know:String(b.want_to_know||'').trim()||null,how_i_felt:String(b.how_i_felt||'').trim()||null,what_i_noticed:String(b.what_i_noticed||'').trim()||null,what_changed:String(b.what_changed||'').trim()||null,repair_or_tension:String(b.repair_or_tension||'').trim()||null};
+ const rows=await request('/connection_reflections',{method:'POST',accessToken,prefer:'return=representation',body:{match_id:b.match_id||null,user_id:uid,other_user_id:b.other_user_id,encounter_number:encounter,stage,occurred_at:b.occurred_at||new Date().toISOString(),desire_to_continue:b.desire_to_continue==null?null:!!b.desire_to_continue,felt_safe:rate('felt_safe'),felt_seen:rate('felt_seen'),attraction:rate('attraction'),curiosity:rate('curiosity'),ease:rate('ease'),reflection}});
+ const reflectionId=rows?.[0]?.id;const observations=[];
+ const add=(type,text)=>{text=String(text||'').trim();if(text)observations.push({reflection_id:reflectionId,observer_user_id:uid,other_user_id:b.other_user_id,observation_type:type,body:text,subjective:true});};
+ add('self_response',b.how_i_felt);add('noticed_quality',b.what_i_noticed);add('interaction_pattern',b.what_changed||b.repair_or_tension);add('open_question',b.want_to_know);
+ if(reflectionId&&observations.length)await request('/relational_observations',{method:'POST',accessToken,body:observations,prefer:'return=minimal'});
+ return rows;
+}
 
 module.exports=async function handler(req,res){
  if(req.method!=='POST'){res.setHeader('Allow','POST');return res.status(405).json({error:'Method not allowed.'});}
@@ -43,6 +48,7 @@ module.exports=async function handler(req,res){
   if(action==='hydrate')return res.status(200).json({ok:true,user_id:uid,...await hydrate(uid,accessToken)});
   if(action==='mirror_feedback'){const rows=await saveMirrorFeedback(uid,body,accessToken);return res.status(200).json({ok:true,user_id:uid,feedback:rows?.[0]||null});}
   if(action==='match_outcome'){const rows=await saveMatchOutcome(uid,body,accessToken);return res.status(200).json({ok:true,user_id:uid,outcome:rows?.[0]||null});}
+  if(action==='connection_reflection'){const rows=await saveConnectionReflection(uid,body,accessToken);return res.status(200).json({ok:true,user_id:uid,reflection:rows?.[0]||null});}
 
   const {birth,essentials,answers,places={}}=body;
   if(birth){await upsertOptionalLocation('birth_data',{user_id:uid,date_of_birth:birth.dob||null,time_of_birth:birth.tob||null,place_of_birth:birth.pob||null,time_accuracy:birth.toa||null,...(places.birthplace?{location_data:places.birthplace}:{}),updated_at:new Date().toISOString()},accessToken,'user_id');}

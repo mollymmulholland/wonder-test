@@ -29,4 +29,5 @@
   grid.addEventListener('click',e=>{const card=e.target.closest('.match-live-card');if(!card)return;if(e.target.closest('.match-explore'))react(card,'explore');if(e.target.closest('.match-decline'))react(card,'decline');});
   document.addEventListener('click',e=>{if(e.target.closest('[data-next="matches"]'))setTimeout(renderLive,80)},true);
   const observer=new MutationObserver(()=>{if(document.getElementById('matches')?.classList.contains('active'))renderLive();});observer.observe(document.getElementById('matches'),{attributes:true,attributeFilter:['class']});
+  if(!document.querySelector('script[data-relational-curiosity]')){const script=document.createElement('script');script.src='relational-curiosity.js';script.dataset.relationalCuriosity='1';document.body.appendChild(script);}
 })();

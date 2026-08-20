@@ -35,32 +35,26 @@ async function refreshRelationalSelf(uid,accessToken){
   return rows?.[0]||null;
 }
 
+async function getConnectionContext(uid,b,accessToken){
+  if(!b.other_user_id)throw new Error('other_user_id is required');
+  const rows=await request(`/connection_reflections?user_id=eq.${uid}&other_user_id=eq.${encodeURIComponent(b.other_user_id)}&select=encounter_number,stage,mode,reflection,occurred_at&order=encounter_number.desc&limit=6`,{accessToken});
+  const previous=rows||[];const last=previous[0]||null;let carry=null;
+  for(const row of previous){const q=row?.reflection?.what_i_wonder||row?.reflection?.want_to_know;if(q){carry=q;break;}}
+  const nextEncounter=(Number(last?.encounter_number)||0)+1;
+  return{next_encounter:nextEncounter,stage:nextEncounter>=5?'established':nextEncounter>=3?'developing':'early',carry_forward_question:carry,last_mode:last?.mode||null,reflection_count:previous.length};
+}
+
 async function saveConnectionReflection(uid,b,accessToken){
   if(!b.other_user_id)throw new Error('other_user_id is required');
   const previous=await request(`/connection_reflections?user_id=eq.${uid}&other_user_id=eq.${encodeURIComponent(b.other_user_id)}&select=encounter_number&order=encounter_number.desc&limit=1`,{accessToken});
   const encounter=Number(b.encounter_number)||((previous?.[0]?.encounter_number||0)+1),stage=encounter>=5?'established':encounter>=3?'developing':'early';
   const allowedModes=new Set(['curiosity','reflection','concern','excitement']);const mode=allowedModes.has(b.mode)?b.mode:'reflection';
   const rate=(k)=>{if(b[k]==null||b[k]==='')return null;const n=Number(b[k]);if(!Number.isFinite(n)||n<1||n>7)throw new Error(`${k} must be between 1 and 7`);return n;};
-  const reflection={
-    surprised_by:String(b.surprised_by||'').trim()||null,
-    how_i_felt:String(b.how_i_felt||'').trim()||null,
-    what_i_know:String(b.what_i_know||'').trim()||null,
-    what_i_interpret:String(b.what_i_interpret||'').trim()||null,
-    what_i_wonder:String(b.what_i_wonder||b.want_to_know||'').trim()||null,
-    what_i_noticed:String(b.what_i_noticed||'').trim()||null,
-    what_changed:String(b.what_changed||'').trim()||null,
-    repair_or_tension:String(b.repair_or_tension||'').trim()||null,
-    where_more_or_less_self:String(b.where_more_or_less_self||'').trim()||null
-  };
+  const reflection={surprised_by:String(b.surprised_by||'').trim()||null,how_i_felt:String(b.how_i_felt||'').trim()||null,what_i_know:String(b.what_i_know||'').trim()||null,what_i_interpret:String(b.what_i_interpret||'').trim()||null,what_i_wonder:String(b.what_i_wonder||b.want_to_know||'').trim()||null,what_i_noticed:String(b.what_i_noticed||'').trim()||null,what_changed:String(b.what_changed||'').trim()||null,repair_or_tension:String(b.repair_or_tension||'').trim()||null,where_more_or_less_self:String(b.where_more_or_less_self||'').trim()||null};
   const rows=await request('/connection_reflections',{method:'POST',accessToken,prefer:'return=representation',body:{match_id:b.match_id||null,user_id:uid,other_user_id:b.other_user_id,encounter_number:encounter,stage,mode,share_status:'private',occurred_at:b.occurred_at||new Date().toISOString(),desire_to_continue:b.desire_to_continue==null?null:!!b.desire_to_continue,felt_safe:rate('felt_safe'),felt_seen:rate('felt_seen'),attraction:rate('attraction'),curiosity:rate('curiosity'),ease:rate('ease'),reflection}});
   const reflectionId=rows?.[0]?.id;const observations=[];
   const add=(type,text,epistemic_status,scope)=>{text=String(text||'').trim();if(text)observations.push({reflection_id:reflectionId,observer_user_id:uid,other_user_id:b.other_user_id,observation_type:type,body:text,subjective:true,epistemic_status,scope});};
-  add('self_response',b.how_i_felt,'observation','observer_self');
-  add('interaction_pattern',b.what_i_know,'observation','interaction');
-  add('noticed_quality',b.what_i_noticed,'observation','subjective_other');
-  add('interaction_pattern',b.what_i_interpret,'interpretation','interaction');
-  add('interaction_pattern',b.what_changed||b.repair_or_tension,'interpretation','interaction');
-  add('open_question',b.what_i_wonder||b.want_to_know,'question','interaction');
+  add('self_response',b.how_i_felt,'observation','observer_self');add('interaction_pattern',b.what_i_know,'observation','interaction');add('noticed_quality',b.what_i_noticed,'observation','subjective_other');add('interaction_pattern',b.what_i_interpret,'interpretation','interaction');add('interaction_pattern',b.what_changed||b.repair_or_tension,'interpretation','interaction');add('open_question',b.what_i_wonder||b.want_to_know,'question','interaction');
   if(reflectionId&&observations.length)await request('/relational_observations',{method:'POST',accessToken,body:observations,prefer:'return=minimal'});
   const relationalSelf=await refreshRelationalSelf(uid,accessToken).catch(()=>null);
   return{reflection:rows?.[0]||null,relational_self:relationalSelf};
@@ -76,6 +70,7 @@ module.exports=async function handler(req,res){
     if(action==='hydrate')return res.status(200).json({ok:true,user_id:uid,...await hydrate(uid,accessToken)});
     if(action==='mirror_feedback'){const rows=await saveMirrorFeedback(uid,body,accessToken);return res.status(200).json({ok:true,user_id:uid,feedback:rows?.[0]||null});}
     if(action==='match_outcome'){const rows=await saveMatchOutcome(uid,body,accessToken);return res.status(200).json({ok:true,user_id:uid,outcome:rows?.[0]||null});}
+    if(action==='connection_context')return res.status(200).json({ok:true,user_id:uid,...await getConnectionContext(uid,body,accessToken)});
     if(action==='connection_reflection'){const saved=await saveConnectionReflection(uid,body,accessToken);return res.status(200).json({ok:true,user_id:uid,...saved});}
 
     const {birth,essentials,answers,places={}}=body;

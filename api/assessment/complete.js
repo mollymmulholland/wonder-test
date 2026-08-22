@@ -1,9 +1,11 @@
 const {authUser,rest}=require('../../lib/supabase-server');
 const {scoreResponses,inferArchetypes}=require('../../lib/person-model');
 const {buildMirror}=require('../../lib/mirror-engine');
+const {ELEMENTS,ELEMENT_IDS}=require('../../lib/adaptive-assessment');
 
 function median(values=[]){const v=values.filter(Number.isFinite).sort((a,b)=>a-b);if(!v.length)return null;const m=Math.floor(v.length/2);return v.length%2?v[m]:Math.round((v[m-1]+v[m])/2);}
-function qualityEvidence(rows=[]){const times=rows.map(r=>Number(r.response_time_ms)).filter(n=>Number.isFinite(n)&&n>0),changes=rows.map(r=>Math.max(0,Number(r.changed_count||0)));return{response_count:rows.length,median_response_time_ms:median(times),rapid_response_count:times.filter(n=>n<1200).length,changed_response_count:changes.filter(n=>n>0).length,total_changed_count:changes.reduce((a,b)=>a+b,0)};}
+function summarizeRows(rows=[]){const times=rows.map(r=>Number(r.response_time_ms)).filter(n=>Number.isFinite(n)&&n>0),changes=rows.map(r=>Math.max(0,Number(r.changed_count||0)));return{response_count:rows.length,median_response_time_ms:median(times),rapid_response_count:times.filter(n=>n<1200).length,changed_response_count:changes.filter(n=>n>0).length,total_changed_count:changes.reduce((a,b)=>a+b,0)};}
+function qualityEvidence(rows=[]){const overall=summarizeRows(rows),by_element={};for(const element of ELEMENTS){const ids=new Set(ELEMENT_IDS[element]||[]);by_element[element]=summarizeRows(rows.filter(r=>ids.has(r.item_id)));}return{...overall,by_element};}
 
 module.exports=async function handler(req,res){
  if(req.method!=='POST')return res.status(405).json({error:'Method not allowed.'});
@@ -14,8 +16,6 @@ module.exports=async function handler(req,res){
   const existing=await rest(`/person_model_snapshots?assessment_session_id=eq.${encodeURIComponent(session_id)}&user_id=eq.${encodeURIComponent(user.id)}&select=*&order=created_at.desc&limit=1`,{accessToken:token});
   if(existing?.[0]){const snap=existing[0],model={dimensions:snap.scores||{},evidence:snap.confidence?.evidence||{},coverage:Number(snap.confidence?.coverage||0)},archetypes=Array.isArray(snap.archetypes)?snap.archetypes:[],quality=snap.evidence?.quality||snap.evidence||{},mirror=buildMirror(model,archetypes,{response_count:Number(snap.evidence?.response_count||quality.response_count||0),quality});return res.status(200).json({model,archetypes,mirror,response_count:Number(snap.evidence?.response_count||quality.response_count||0),quality,snapshot_id:snap.id,already_completed:true});}
   const rows=await rest(`/assessment_responses_v2?session_id=eq.${encodeURIComponent(session_id)}&user_id=eq.${encodeURIComponent(user.id)}&select=item_id,response,response_time_ms,changed_count`,{accessToken:token});
-  // Five Elements core currently contributes 35 required answers. Do not create a Mirror
-  // before the user has actually traversed the full elemental sequence.
   if(rows.length<35)return res.status(409).json({error:'Complete the Five Elements before entering the Mirror.',response_count:rows.length,required:35});
   const responses={};for(const row of rows)responses[row.item_id]=row.response;const model=scoreResponses(responses),archetypes=inferArchetypes(model),quality=qualityEvidence(rows),mirror=buildMirror(model,archetypes,{response_count:rows.length,quality});
   const evidence={response_count:rows.length,quality,elements:mirror.elements,patterns:mirror.patterns,mirror_basis:mirror.basis};

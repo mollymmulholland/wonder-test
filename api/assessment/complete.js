@@ -1,5 +1,6 @@
 const {authUser,rest}=require('../../lib/supabase-server');
-const {scoreResponses,inferArchetypes}=require('../../lib/person-model');
+const {scoreResponses}=require('../../lib/person-model');
+const {inferArchetypes,deriveFoundations,VERSION:archetype_version}=require('../../lib/archetype-system-v2');
 const {buildMirror}=require('../../lib/mirror-engine');
 const {ELEMENTS,ELEMENT_IDS}=require('../../lib/adaptive-assessment');
 
@@ -14,13 +15,13 @@ module.exports=async function handler(req,res){
  try{
   const sessions=await rest(`/assessment_sessions?id=eq.${encodeURIComponent(session_id)}&user_id=eq.${encodeURIComponent(user.id)}&select=*&limit=1`,{accessToken:token});const session=sessions?.[0];if(!session)return res.status(404).json({error:'Assessment session not found.'});
   const existing=await rest(`/person_model_snapshots?assessment_session_id=eq.${encodeURIComponent(session_id)}&user_id=eq.${encodeURIComponent(user.id)}&select=*&order=created_at.desc&limit=1`,{accessToken:token});
-  if(existing?.[0]){const snap=existing[0],model={dimensions:snap.scores||{},evidence:snap.confidence?.evidence||{},coverage:Number(snap.confidence?.coverage||0)},archetypes=Array.isArray(snap.archetypes)?snap.archetypes:[],quality=snap.evidence?.quality||snap.evidence||{},mirror=buildMirror(model,archetypes,{response_count:Number(snap.evidence?.response_count||quality.response_count||0),quality});return res.status(200).json({model,archetypes,mirror,response_count:Number(snap.evidence?.response_count||quality.response_count||0),quality,snapshot_id:snap.id,already_completed:true});}
+  if(existing?.[0]){const snap=existing[0],model={dimensions:snap.scores||{},evidence:snap.confidence?.evidence||{},coverage:Number(snap.confidence?.coverage||0),foundations:snap.evidence?.foundations||{}},archetypes=Array.isArray(snap.archetypes)?snap.archetypes:[],quality=snap.evidence?.quality||snap.evidence||{},mirror=buildMirror(model,archetypes,{response_count:Number(snap.evidence?.response_count||quality.response_count||0),quality});return res.status(200).json({model,archetypes,mirror,response_count:Number(snap.evidence?.response_count||quality.response_count||0),quality,snapshot_id:snap.id,already_completed:true,archetype_version:snap.evidence?.archetype_version||'legacy'});}
   const rows=await rest(`/assessment_responses_v2?session_id=eq.${encodeURIComponent(session_id)}&user_id=eq.${encodeURIComponent(user.id)}&select=item_id,response,response_time_ms,changed_count`,{accessToken:token});
   if(rows.length<35)return res.status(409).json({error:'Complete the Five Elements before entering the Mirror.',response_count:rows.length,required:35});
-  const responses={};for(const row of rows)responses[row.item_id]=row.response;const model=scoreResponses(responses),archetypes=inferArchetypes(model),quality=qualityEvidence(rows),mirror=buildMirror(model,archetypes,{response_count:rows.length,quality});
-  const evidence={response_count:rows.length,quality,elements:mirror.elements,patterns:mirror.patterns,mirror_basis:mirror.basis};
-  const created=await rest('/person_model_snapshots?select=*',{method:'POST',admin:true,prefer:'return=representation',body:{user_id:user.id,assessment_session_id:session_id,model_version:'wonder-person-model-v2.3-elements',scores:model.dimensions,confidence:{coverage:model.coverage,evidence:model.evidence,archetype_confidence:mirror.archetype_confidence},evidence,archetypes}});
+  const responses={};for(const row of rows)responses[row.item_id]=row.response;const model=scoreResponses(responses),foundations=deriveFoundations(model),archetypes=inferArchetypes(model),quality=qualityEvidence(rows),modelWithFoundations={...model,foundations},mirror=buildMirror(modelWithFoundations,archetypes,{response_count:rows.length,quality});
+  const evidence={response_count:rows.length,quality,elements:mirror.elements,patterns:mirror.patterns,mirror_basis:mirror.basis,foundations,archetype_version};
+  const created=await rest('/person_model_snapshots?select=*',{method:'POST',admin:true,prefer:'return=representation',body:{user_id:user.id,assessment_session_id:session_id,model_version:'wonder-person-model-v3.0-multiframework',scores:model.dimensions,confidence:{coverage:model.coverage,evidence:model.evidence,archetype_confidence:archetypes[0]?.confidence||mirror.archetype_confidence},evidence,archetypes}});
   await rest(`/assessment_sessions?id=eq.${encodeURIComponent(session_id)}&user_id=eq.${encodeURIComponent(user.id)}`,{method:'PATCH',accessToken:token,prefer:'return=minimal',body:{status:'completed',completed_at:new Date().toISOString(),updated_at:new Date().toISOString()}});
-  return res.status(200).json({model,archetypes,mirror,response_count:rows.length,quality,snapshot_id:created?.[0]?.id||null,already_completed:false});
+  return res.status(200).json({model:modelWithFoundations,archetypes,mirror,response_count:rows.length,quality,snapshot_id:created?.[0]?.id||null,already_completed:false,archetype_version});
  }catch(e){console.error('assessment complete',e);return res.status(500).json({error:'Unable to complete assessment.'});}
 };

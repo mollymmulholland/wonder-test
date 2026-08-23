@@ -1,36 +1,30 @@
 const {authUser,rest}=require('../../lib/supabase-server');
+const {ITEMS}=require('../../lib/person-model');
+const {PRECISION_ITEMS}=require('../../lib/archetype-precision');
+const ITEM_MAP=new Map([...(ITEMS||[]),...(PRECISION_ITEMS||[])].map(x=>[x.id,x]));
+
+function validResponse(item,response){
+  if(!item)return false;
+  if(item.type==='single'){const n=Number(response);return Number.isInteger(n)&&n>=0&&n<(item.options||[]).length;}
+  if(item.type==='scale'){const n=Number(response);return Number.isInteger(n)&&n>=1&&n<=7;}
+  if(item.type==='multi'){if(!Array.isArray(response)||response.length<1||response.length>(item.max||3))return false;const set=new Set(response);return set.size===response.length&&response.every(n=>Number.isInteger(Number(n))&&Number(n)>=0&&Number(n)<(item.options||[]).length);}
+  if(item.type==='rank'){if(!Array.isArray(response)||response.length!==(item.max||5))return false;const set=new Set(response);return set.size===response.length&&response.every(n=>Number.isInteger(Number(n))&&Number(n)>=0&&Number(n)<(item.options||[]).length);}
+  return false;
+}
 
 module.exports=async function handler(req,res){
   if(req.method!=='POST')return res.status(405).json({error:'Method not allowed.'});
-  const auth=String(req.headers.authorization||'');
-  const token=auth.startsWith('Bearer ')?auth.slice(7):'';
-  const user=await authUser(token);
+  const auth=String(req.headers.authorization||''),token=auth.startsWith('Bearer ')?auth.slice(7):'',user=await authUser(token);
   if(!user?.id)return res.status(401).json({error:'Authentication required.'});
-
   const {session_id,item_id,response,response_time_ms,changed_count}=req.body||{};
   if(!session_id||!item_id||response===undefined)return res.status(400).json({error:'session_id, item_id, and response are required.'});
-
+  const item=ITEM_MAP.get(String(item_id));if(!item)return res.status(400).json({error:'Unknown assessment item.'});
+  if(!validResponse(item,response))return res.status(400).json({error:'Invalid response for this assessment item.'});
+  const time=Number(response_time_ms),changes=Number(changed_count||0);
   try{
     const sessions=await rest(`/assessment_sessions?id=eq.${encodeURIComponent(session_id)}&user_id=eq.${encodeURIComponent(user.id)}&status=eq.in_progress&select=id&limit=1`,{accessToken:token});
     if(!sessions?.[0])return res.status(409).json({error:'Assessment session is not active.'});
-
-    await rest(`/assessment_responses_v2?on_conflict=session_id,item_id`,{
-      method:'POST',
-      accessToken:token,
-      prefer:'resolution=merge-duplicates,return=minimal',
-      body:{
-        session_id,
-        user_id:user.id,
-        item_id,
-        response,
-        response_time_ms:Number.isFinite(Number(response_time_ms))?Number(response_time_ms):null,
-        changed_count:Math.max(0,Number(changed_count||0)),
-        updated_at:new Date().toISOString()
-      }
-    });
-    return res.status(200).json({ok:true});
-  }catch(e){
-    console.error('assessment respond',e);
-    return res.status(500).json({error:'Unable to save response.'});
-  }
+    await rest(`/assessment_responses_v2?on_conflict=session_id,item_id`,{method:'POST',accessToken:token,prefer:'resolution=merge-duplicates,return=minimal',body:{session_id,user_id:user.id,item_id:String(item_id),response,response_time_ms:Number.isFinite(time)?Math.max(0,Math.min(3600000,Math.round(time))):null,changed_count:Number.isFinite(changes)?Math.max(0,Math.min(999,Math.round(changes))):0,updated_at:new Date().toISOString()}});
+    return res.status(200).json({ok:true,item_id:String(item_id)});
+  }catch(e){console.error('assessment respond',e);return res.status(500).json({error:'Unable to save response.'});}
 };

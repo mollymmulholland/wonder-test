@@ -1,0 +1,11 @@
+(()=>{
+ const getState=()=>{try{return JSON.parse(localStorage.getItem('wonder_preview_state')||'{}')}catch{return{}}};
+ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ function payload(){return getState()?.assessmentV2?.mirror?.architecture||null;}
+ function ensure(){const mirror=document.querySelector('#mirror .mirror');if(!mirror||mirror.querySelector('.architecture-reveal'))return mirror?.querySelector('.architecture-reveal')||null;const el=document.createElement('section');el.className='architecture-reveal';const uncertain=mirror.querySelector('.uncertain');if(uncertain)mirror.insertBefore(el,uncertain);else mirror.appendChild(el);return el;}
+ function render(){const data=payload(),mount=ensure();if(!data||!mount)return;const sections=(data.sections||[]).filter(Boolean);mount.innerHTML=`<header class="architecture-intro"><span>Below the archetype</span><h2>You are not one pattern.</h2><p>The archetype is shorthand. Wonder also looks at the different ways you perceive, attach, act, create meaning, and protect yourself under pressure.</p></header><div class="architecture-path">${sections.map((s,i)=>`<article class="architecture-layer" data-layer="${esc(s.name)}" style="--reveal-index:${i}"><div class="layer-index">0${i+1}</div><div class="layer-copy"><span>${esc(s.label)}</span><h3>${esc(s.headline)}</h3><p>${esc(s.body)}</p>${s.archetype?`<small>${esc(s.archetype)} · ${esc(String(s.expression||'').replace(/_/g,' '))}</small>`:''}</div></article>`).join('')}</div><article class="architecture-integration"><span>Between the selves</span><h3>What you lead with is not always what protects you.</h3><p>${esc(data.integration)}</p></article><article class="architecture-relational"><span>What this means for love</span><h3>The right relationship has to hold more than your type.</h3><p>${esc(data.relational)}</p></article>`;
+ requestAnimationFrame(()=>mount.classList.add('revealed'));
+ }
+ const mirror=document.getElementById('mirror');if(mirror){new MutationObserver(()=>{if(mirror.classList.contains('active'))render()}).observe(mirror,{attributes:true,attributeFilter:['class']});if(mirror.classList.contains('active'))render();}
+ window.addEventListener('storage',()=>{if(mirror?.classList.contains('active'))render()});
+})();

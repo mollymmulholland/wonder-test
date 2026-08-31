@@ -1,7 +1,6 @@
 {
   "cleanUrls": true,
   "trailingSlash": false,
-  "buildCommand": "node scripts/qa-e2e-build.js",
   "headers": [
     {
       "source": "/(.*)",

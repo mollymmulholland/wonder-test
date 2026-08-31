@@ -41,19 +41,30 @@ async function upsertOptionalLocation(table, row, token, onConflict) {
   }
 }
 
+async function relationalJournalRows(uid, token, order = 'asc') {
+  const rows = await request(
+    `/journal_entries?user_id=eq.${uid}&select=id,body,created_at&order=created_at.${order}&limit=300`,
+    { accessToken: token }
+  );
+  return (rows || [])
+    .filter(row => row?.body?.type === 'connection_reflection')
+    .map(row => ({ id: row.id, ...(row.body || {}), occurred_at: row.body?.occurred_at || row.created_at }));
+}
+
 async function hydrate(uid, token) {
-  const [profiles, births, snapshots, sessions, relationalSelf] = await Promise.all([
+  const [profiles, births, snapshots, sessions, journalRows] = await Promise.all([
     request(`/profiles?user_id=eq.${uid}&select=*&limit=1`, { accessToken: token }),
     request(`/birth_data?user_id=eq.${uid}&select=*&limit=1`, { accessToken: token }),
     request(`/person_model_snapshots?user_id=eq.${uid}&select=*&order=created_at.desc&limit=1`, { accessToken: token }),
     request(`/assessment_sessions?user_id=eq.${uid}&status=eq.in_progress&select=*&order=started_at.desc&limit=1`, { accessToken: token }),
-    request(`/relational_self_snapshots?user_id=eq.${uid}&select=*&order=created_at.desc&limit=1`, { accessToken: token }).catch(() => [])
+    request(`/journal_entries?user_id=eq.${uid}&select=id,body,created_at&order=created_at.desc&limit=100`, { accessToken: token }).catch(() => [])
   ]);
 
   const profile = profiles?.[0] || null;
   const birth = births?.[0] || null;
   const snapshot = snapshots?.[0] || null;
   const session = sessions?.[0] || null;
+  const relationalSelf = (journalRows || []).find(row => row?.body?.type === 'relational_self_snapshot')?.body?.snapshot || null;
   let assessment = null;
   let active = null;
 
@@ -89,7 +100,7 @@ async function hydrate(uid, token) {
     active = { session, responses };
   }
 
-  return { profile, birth, assessment, active_assessment: active, relational_self: relationalSelf?.[0] || null };
+  return { profile, birth, assessment, active_assessment: active, relational_self: relationalSelf };
 }
 
 const rating = (value, name) => {
@@ -155,36 +166,36 @@ async function saveMatchOutcome(uid, body, token) {
     row[field] = rating(body[field], field);
   }
 
-  return request('/match_outcomes?on_conflict=match_id,user_id', {
-    method: 'POST',
-    accessToken: token,
-    prefer: 'resolution=merge-duplicates,return=representation',
-    body: row
+  const existing = body.match_id ? await request(
+    `/match_outcomes?match_id=eq.${encodeURIComponent(body.match_id)}&user_id=eq.${uid}&select=id&limit=1`,
+    { accessToken: token }
+  ) : [];
+  if (existing?.[0]?.id) {
+    return request(`/match_outcomes?id=eq.${encodeURIComponent(existing[0].id)}`, {
+      method: 'PATCH', accessToken: token, prefer: 'return=representation', body: row
+    });
+  }
+  return request('/match_outcomes', {
+    method: 'POST', accessToken: token, prefer: 'return=representation', body: row
   });
 }
 
 async function refreshRelationalSelf(uid, token) {
-  const reflections = await request(
-    `/connection_reflections?user_id=eq.${uid}&select=id,other_user_id,encounter_number,stage,mode,desire_to_continue,felt_safe,felt_seen,attraction,curiosity,ease,reflection,occurred_at&order=occurred_at.asc&limit=200`,
-    { accessToken: token }
-  );
+  const reflections = await relationalJournalRows(uid, token, 'asc');
   const result = buildRelationalSelf(reflections || []);
   if ((result.evidence?.reflection_count || 0) < 3) return null;
-
-  const rows = await request('/relational_self_snapshots', {
-    method: 'POST',
-    accessToken: token,
-    prefer: 'return=representation',
-    body: {
-      user_id: uid,
-      model_version: 'relational-self-v1',
-      hypotheses: result.hypotheses,
-      evidence: result.evidence,
-      source_reflection_count: result.evidence.reflection_count,
-      distinct_connection_count: result.evidence.distinct_connection_count
-    }
+  const snapshot = {
+    model_version: 'relational-self-v1',
+    hypotheses: result.hypotheses,
+    evidence: result.evidence,
+    source_reflection_count: result.evidence.reflection_count,
+    distinct_connection_count: result.evidence.distinct_connection_count
+  };
+  await request('/journal_entries', {
+    method: 'POST', accessToken: token, prefer: 'return=minimal',
+    body: { user_id: uid, body: { type: 'relational_self_snapshot', snapshot } }
   });
-  return rows?.[0] || null;
+  return snapshot;
 }
 
 async function getConnectionContext(uid, body, token) {
@@ -199,22 +210,14 @@ async function getConnectionContext(uid, body, token) {
     if (!match?.[0]) throw new Error('Match not found');
   }
 
-  const rows = await request(
-    `/connection_reflections?user_id=eq.${uid}&other_user_id=eq.${encodeURIComponent(otherUserId)}&select=encounter_number,stage,mode,reflection,occurred_at&order=encounter_number.desc&limit=6`,
-    { accessToken: token }
-  );
-  const previous = rows || [];
+  const all = await relationalJournalRows(uid, token, 'desc');
+  const previous = all.filter(row => row.other_user_id === otherUserId).slice(0, 6);
   const last = previous[0] || null;
   let carryForwardQuestion = null;
-
   for (const row of previous) {
     const question = row?.reflection?.what_i_wonder || row?.reflection?.want_to_know;
-    if (question) {
-      carryForwardQuestion = question;
-      break;
-    }
+    if (question) { carryForwardQuestion = question; break; }
   }
-
   const nextEncounter = (Number(last?.encounter_number) || 0) + 1;
   return {
     next_encounter: nextEncounter,
@@ -237,11 +240,9 @@ async function saveConnectionReflection(uid, body, token) {
     if (!matches?.[0]) throw new Error('Match not found');
   }
 
-  const prev = await request(
-    `/connection_reflections?user_id=eq.${uid}&other_user_id=eq.${encodeURIComponent(otherUserId)}&select=encounter_number&order=encounter_number.desc&limit=1`,
-    { accessToken: token }
-  );
-  const encounter = Math.max(1, Math.min(999, Number(body.encounter_number) || ((prev?.[0]?.encounter_number || 0) + 1)));
+  const all = await relationalJournalRows(uid, token, 'desc');
+  const prev = all.find(row => row.other_user_id === otherUserId) || null;
+  const encounter = Math.max(1, Math.min(999, Number(body.encounter_number) || ((prev?.encounter_number || 0) + 1)));
   const stage = encounter >= 5 ? 'established' : encounter >= 3 ? 'developing' : 'early';
   const mode = ['curiosity', 'reflection', 'concern', 'excitement'].includes(body.mode) ? body.mode : 'reflection';
 
@@ -257,33 +258,29 @@ async function saveConnectionReflection(uid, body, token) {
     where_more_or_less_self: cleanText(body.where_more_or_less_self, 2000) || null
   };
 
-  const rows = await request('/connection_reflections', {
-    method: 'POST',
-    accessToken: token,
-    prefer: 'return=representation',
-    body: {
-      match_id: body.match_id || null,
-      user_id: uid,
-      other_user_id: otherUserId,
-      encounter_number: encounter,
-      stage,
-      mode,
-      share_status: 'private',
-      occurred_at: new Date().toISOString(),
-      desire_to_continue: body.desire_to_continue == null ? null : !!body.desire_to_continue,
-      felt_safe: rating(body.felt_safe, 'felt_safe'),
-      felt_seen: rating(body.felt_seen, 'felt_seen'),
-      attraction: rating(body.attraction, 'attraction'),
-      curiosity: rating(body.curiosity, 'curiosity'),
-      ease: rating(body.ease, 'ease'),
-      reflection
-    }
-  });
-
-  return {
-    reflection: rows?.[0] || null,
-    relational_self: await refreshRelationalSelf(uid, token).catch(() => null)
+  const record = {
+    type: 'connection_reflection',
+    match_id: body.match_id || null,
+    other_user_id: otherUserId,
+    encounter_number: encounter,
+    stage,
+    mode,
+    share_status: 'private',
+    occurred_at: new Date().toISOString(),
+    desire_to_continue: body.desire_to_continue == null ? null : !!body.desire_to_continue,
+    felt_safe: rating(body.felt_safe, 'felt_safe'),
+    felt_seen: rating(body.felt_seen, 'felt_seen'),
+    attraction: rating(body.attraction, 'attraction'),
+    curiosity: rating(body.curiosity, 'curiosity'),
+    ease: rating(body.ease, 'ease'),
+    reflection
   };
+  const rows = await request('/journal_entries', {
+    method: 'POST', accessToken: token, prefer: 'return=representation',
+    body: { user_id: uid, body: record }
+  });
+  const stored = rows?.[0] ? { id: rows[0].id, ...record, created_at: rows[0].created_at } : null;
+  return { reflection: stored, relational_self: await refreshRelationalSelf(uid, token).catch(() => null) };
 }
 
 module.exports = async function handler(req, res) {

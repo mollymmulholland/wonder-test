@@ -1,6 +1,7 @@
 (()=>{
  const $=id=>document.getElementById(id),state=()=>{try{return JSON.parse(localStorage.getItem('wonder_preview_state')||'{}')}catch{return{}}},save=s=>{try{localStorage.setItem('wonder_preview_state',JSON.stringify(s))}catch{}};
  const email=$('accountEmail'),phone=$('accountPhone'),password=$('accountPassword'),btn=$('accountContinue'),status=$('accountStatus');if(!email||!phone||!password||!btn)return;
+ password.minLength=10;password.placeholder='At least 10 characters';
  let toggle=$('accountModeToggle');if(!toggle){toggle=document.createElement('button');toggle.id='accountModeToggle';toggle.type='button';toggle.className='account-mode-toggle';toggle.textContent='Already have an account? Sign in';btn.closest('.actions')?.insertAdjacentElement('afterend',toggle);}let mode='create';const phoneLabel=phone.closest('label'),existing=state();if(existing.account){email.value=existing.account.email||'';phone.value=existing.account.phone||'';}
  const validEmail=v=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v),normalizePhone=v=>v.replace(/[^\d+]/g,''),showStatus=t=>{if(status){status.textContent=t||'';status.style.display=t?'block':'none'}};
  function setMode(next){mode=next;if(phoneLabel)phoneLabel.style.display=mode==='signin'?'none':'';btn.textContent=mode==='signin'?'Sign in':'Create account';toggle.textContent=mode==='signin'?'New to Wonder? Create an account':'Already have an account? Sign in';showStatus('');}toggle.onclick=()=>setMode(mode==='signin'?'create':'signin');

@@ -1,6 +1,7 @@
 'use strict';
 
 const {health:modelHealth}=require('../lib/wonder-model-gateway');
+const {candidate,PROMOTION_GATES}=require('../lib/wonder-mind-model-registry');
 
 const RAW_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_URL = String(RAW_SUPABASE_URL || '').replace(/\/(?:rest|auth)\/v1\/?$/,'').replace(/\/$/,'');
@@ -57,19 +58,34 @@ async function wonderMindDiagnostics(){
     sb('/rest/v1/wonder_mind_inference_runs?select=id,status,created_at&order=created_at.desc&limit=20'),
     sb('/rest/v1/wonder_mind_events?select=id,processing_status&order=created_at.desc&limit=100'),
     sb('/rest/v1/wonder_mind_memory?superseded_by=is.null&select=id'),
-    sb('/rest/v1/wonder_mind_model_versions?select=version,status,substrate,base_model,constitution_version,cognitive_architecture_version,activated_at&order=created_at.desc&limit=5')
+    sb('/rest/v1/wonder_mind_model_versions?select=version,status,substrate,base_model,constitution_version,cognitive_architecture_version,configuration,evaluation_summary,activated_at&order=created_at.desc&limit=8')
   ]);
   const count=x=>Array.isArray(x.data)?x.data.length:0;
   const failedRuns=(runs.data||[]).filter(r=>r.status==='failed').length;
   const failedEvents=(events.data||[]).filter(e=>e.processing_status==='failed').length;
+  const selected=candidate();
+  const modelVersions=versions.data||[];
+  const candidateVersion=modelVersions.find(v=>v.configuration?.candidate_id===selected.id)||null;
+  const evalSummary=candidateVersion?.evaluation_summary||{};
+  const constitutionalEvalPassed=evalSummary.status==='passed'||evalSummary.promotable===true;
   const readiness={
     cognitive_architecture:count(regions)===17,
     research_corpus:count(sources)>=50&&count(knowledge)>=30,
     event_memory_layer:true,
     self_hosted_inference:Boolean(model.ok&&model.modelAvailable!==false),
-    production_ready:Boolean(count(regions)===17&&count(sources)>=50&&count(knowledge)>=30&&model.ok&&model.modelAvailable!==false&&failedRuns===0)
+    constitutional_evaluation:constitutionalEvalPassed,
+    production_ready:Boolean(count(regions)===17&&count(sources)>=50&&count(knowledge)>=30&&model.ok&&model.modelAvailable!==false&&constitutionalEvalPassed&&failedRuns===0)
   };
-  return {status:readiness.production_ready?'ready':'building',readiness,model,counts:{regions:count(regions),sources:count(sources),knowledge:count(knowledge),active_memories:count(memories),recent_runs:count(runs),recent_failed_runs:failedRuns,recent_failed_events:failedEvents},model_versions:versions.data||[]};
+  return {
+    status:readiness.production_ready?'ready':'building',
+    readiness,
+    model,
+    selected_candidate:selected,
+    promotion_gates:PROMOTION_GATES,
+    evaluation:evalSummary,
+    counts:{regions:count(regions),sources:count(sources),knowledge:count(knowledge),active_memories:count(memories),recent_runs:count(runs),recent_failed_runs:failedRuns,recent_failed_events:failedEvents},
+    model_versions:modelVersions
+  };
 }
 
 module.exports = async function handler(req, res) {
@@ -97,7 +113,7 @@ module.exports = async function handler(req, res) {
 
     return res.status(200).json({
       ok:true,smoke,
-      environment:{supabase_url_present:!!SUPABASE_URL,public_key_present:!!SUPABASE_PUBLIC,secret_present:!!SUPABASE_SECRET,admin_token_present:!!ADMIN_TOKEN,normalized_url_changed:String(RAW_SUPABASE_URL || '') !== SUPABASE_URL,wonder_model_url_present:!!process.env.WONDER_MODEL_BASE_URL,wonder_model_name:process.env.WONDER_MODEL_NAME||null},
+      environment:{supabase_url_present:!!SUPABASE_URL,public_key_present:!!SUPABASE_PUBLIC,secret_present:!!SUPABASE_SECRET,admin_token_present:!!ADMIN_TOKEN,normalized_url_changed:String(RAW_SUPABASE_URL || '') !== SUPABASE_URL,wonder_model_url_present:!!process.env.WONDER_MODEL_BASE_URL,wonder_model_name:process.env.WONDER_MODEL_NAME||null,wonder_model_candidate:process.env.WONDER_MODEL_CANDIDATE||'qwen3-32b'},
       public_auth:{reachable:!!publicHealth.ok,status:publicHealth.status,email_signup_enabled:publicHealth.data?.external?.email ?? null,phone_signup_enabled:publicHealth.data?.external?.phone ?? null},
       wonder_mind:mind,
       auth_users:users,

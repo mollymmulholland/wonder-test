@@ -5,6 +5,7 @@ const {runMind,loadUserContext,PURPOSE_BY_RUN}=require('../lib/wonder-mind-runti
 const {loadDyadContext}=require('../lib/wonder-mind-dyad');
 const {planCuriosity,markQuestionAsked,recordQuestionAnswer}=require('../lib/wonder-mind-active-learning');
 const {planExecutiveInformationPolicy}=require('../lib/wonder-mind-executive-policy');
+const {compareCounterfactuals}=require('../lib/wonder-mind-counterfactual');
 
 const RUN_TYPES=new Set(['chat','journal','mirror','assessment','match','post_date','relationship']);
 const MAX_MESSAGE=8000;
@@ -42,6 +43,24 @@ async function executivePolicyAction(userId,body){
   return {mode:'executive_policy',decisionId:rows[0]?.id||null,runType,action:plan.action,confidence:plan.confidence,reason:plan.reason,evidenceAdequacy:plan.evidence_adequacy,responseBurden:plan.response_burden,highestUncertainty:plan.highest_uncertainty,proposedQuestion:plan.proposed_question,uncertainty:plan.uncertainty_map.slice(0,5),risk:plan.risk,policyVersion:plan.policy_version};
 }
 
+async function counterfactualAction(userId,body){
+  const runType=RUN_TYPES.has(String(body.runType||''))?String(body.runType):'relationship';
+  const purposes=PURPOSE_BY_RUN[runType]||PURPOSE_BY_RUN.relationship;
+  const candidateUserId=body.context?.candidateUserId||body.context?.objectUserId||null;
+  const [context,dyadContext,recentQuestions]=await Promise.all([
+    loadUserContext(userId,purposes),
+    candidateUserId&&['match','post_date','relationship'].includes(runType)?loadDyadContext(userId,candidateUserId):Promise.resolve(null),
+    loadRecentQuestions(userId)
+  ]);
+  const comparison=compareCounterfactuals({runType,message:String(body.message||''),options:Array.isArray(body.options)?body.options:[],context,dyadContext,recentQuestions,candidateUserId,userValues:body.userValues&&typeof body.userValues==='object'?body.userValues:{}});
+  const setRows=await rest('/wonder_mind_counterfactual_sets?select=id',{method:'POST',admin:true,prefer:'return=representation',body:{user_id:userId,candidate_user_id:candidateUserId,run_type:runType,question:String(body.message||'').slice(0,4000),executive_action:comparison.executive_action,executive_reason:comparison.executive_reason,recommended_option_id:comparison.recommended_option_id,recommendation_confidence:comparison.recommendation_confidence,policy_version:comparison.policy_version,caveat:comparison.caveat}});
+  const setId=setRows[0]?.id||null;
+  if(setId&&comparison.branches.length){
+    await rest('/wonder_mind_counterfactual_branches',{method:'POST',admin:true,prefer:'return=minimal',body:comparison.branches.map(b=>({set_id:setId,user_id:userId,option_id:b.option_id,label:b.label,archetype:b.archetype,heuristic_utility:b.heuristic_utility,comparison_confidence:b.comparison_confidence,dimensions:b.dimensions,plausible_upside:b.plausible_upside,plausible_downside:b.plausible_downside,evidence_needed:b.evidence_needed,causal_status:b.causal_status}))});
+  }
+  return {mode:'counterfactual',setId,runType,recommendedOptionId:comparison.recommended_option_id,recommendationConfidence:comparison.recommendation_confidence,executiveAction:comparison.executive_action,executiveReason:comparison.executive_reason,branches:comparison.branches,caveat:comparison.caveat,policyVersion:comparison.policy_version};
+}
+
 module.exports=async function handler(req,res){
   res.setHeader('Cache-Control','no-store, private');res.setHeader('X-Content-Type-Options','nosniff');
   if(req.method!=='POST'){res.setHeader('Allow','POST');return res.status(405).json({error:'Method not allowed'});}
@@ -50,6 +69,7 @@ module.exports=async function handler(req,res){
     const body=typeof req.body==='string'?JSON.parse(req.body):(req.body||{});
     if(body.action==='curiosity')return res.status(200).json(await curiosityAction(user.id,body));
     if(body.action==='executive_policy')return res.status(200).json(await executivePolicyAction(user.id,body));
+    if(body.action==='counterfactual')return res.status(200).json(await counterfactualAction(user.id,body));
     if(body.action==='question_answered'){
       if(!body.questionId||!body.answerEventId)return res.status(400).json({error:'questionId and answerEventId are required.'});
       await recordQuestionAnswer({questionId:String(body.questionId),userId:user.id,answerEventId:String(body.answerEventId)});

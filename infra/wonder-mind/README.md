@@ -2,6 +2,8 @@
 
 Wonder Mind is designed to remain independent from proprietary inference providers. The neural substrate is replaceable; Wonder's constitution, cognitive routing, memory, provenance, ethics, evaluation, and product behavior remain owned by Wonder.
 
+The runtime also owns its representations. Completed runs emit versioned N-dimensional cognitive states, controlled 3D projections, observed trajectories, and reversible Wonder Glyph Language programs. These are deterministic layers around the neural substrate, not model-generated decoration. See `docs/WONDER-COGNITIVE-GEOMETRY-AND-GLYPH-IR.md`.
+
 ## Initial candidate
 
 Primary candidate: `Qwen/Qwen3-32B` served on Wonder-controlled infrastructure through vLLM.

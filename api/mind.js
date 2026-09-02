@@ -1,0 +1,96 @@
+'use strict';
+
+const {authUser,rest}=require('../lib/supabase-server');
+const {runMind,loadUserContext,PURPOSE_BY_RUN}=require('../lib/wonder-mind-runtime');
+const {loadDyadContext}=require('../lib/wonder-mind-dyad');
+const {planCuriosity,markQuestionAsked,recordQuestionAnswer}=require('../lib/wonder-mind-active-learning');
+const {planExecutiveInformationPolicy}=require('../lib/wonder-mind-executive-policy');
+const {compareCounterfactuals}=require('../lib/wonder-mind-counterfactual');
+const {evaluateDecisionOutcome}=require('../lib/wonder-mind-decision-learning');
+
+const RUN_TYPES=new Set(['chat','journal','mirror','assessment','match','post_date','relationship']);
+const MAX_MESSAGE=8000;
+const MAX_HISTORY=12;
+
+function bearer(req){const raw=String(req.headers?.authorization||'');return raw.startsWith('Bearer ')?raw.slice(7):'';}
+function cleanHistory(history){return (Array.isArray(history)?history:[]).slice(-MAX_HISTORY).map(m=>({role:m?.role==='assistant'||m?.role==='wonder'?'assistant':'user',text:String(m?.text||m?.content||'').slice(0,4000)})).filter(m=>m.text.trim());}
+async function enforceRunRate(userId){const since=new Date(Date.now()-60_000).toISOString();const recent=await rest(`/wonder_mind_inference_runs?user_id=eq.${encodeURIComponent(userId)}&created_at=gte.${encodeURIComponent(since)}&select=id&limit=9`,{admin:true});if(recent.length>=8){const err=new Error('Reasoning rate exceeded');err.code='WONDER_MIND_RATE_LIMIT';throw err;}}
+
+async function loadRecentQuestions(userId){return rest(`/wonder_mind_question_proposals?user_id=eq.${encodeURIComponent(userId)}&select=id,construct_key,status,asked_at,created_at&order=created_at.desc&limit=20`,{admin:true});}
+
+async function curiosityAction(userId,body){
+  const runType=RUN_TYPES.has(String(body.runType||''))?String(body.runType):'chat';
+  const purposes=PURPOSE_BY_RUN[runType]||PURPOSE_BY_RUN.chat;
+  const candidateUserId=body.context?.candidateUserId||body.context?.objectUserId||null;
+  const [context,dyadContext]=await Promise.all([loadUserContext(userId,purposes),candidateUserId&&['match','post_date','relationship'].includes(runType)?loadDyadContext(userId,candidateUserId):Promise.resolve(null)]);
+  const plan=await planCuriosity({runId:null,userId,candidateUserId,purposes,context,dyadContext,maxQuestions:Math.max(1,Math.min(3,Number(body.maxQuestions)||1))});
+  if(body.markAsked&&plan.topQuestion?.id)await markQuestionAsked({questionId:plan.topQuestion.id,userId});
+  return {mode:'curiosity',runType,topQuestion:plan.topQuestion,questions:plan.questions,uncertainty:plan.uncertainty.slice(0,5)};
+}
+
+async function executivePolicyAction(userId,body){
+  const runType=RUN_TYPES.has(String(body.runType||''))?String(body.runType):'chat';
+  const purposes=PURPOSE_BY_RUN[runType]||PURPOSE_BY_RUN.chat;
+  const candidateUserId=body.context?.candidateUserId||body.context?.objectUserId||null;
+  const [context,dyadContext,recentQuestions]=await Promise.all([loadUserContext(userId,purposes),candidateUserId&&['match','post_date','relationship'].includes(runType)?loadDyadContext(userId,candidateUserId):Promise.resolve(null),loadRecentQuestions(userId)]);
+  const plan=planExecutiveInformationPolicy({runType,message:String(body.message||''),purposes,context,dyadContext,recentQuestions,candidateUserId});
+  const rows=await rest('/wonder_mind_information_policy_decisions?select=id',{method:'POST',admin:true,prefer:'return=representation',body:{user_id:userId,run_id:null,run_type:runType,action:plan.action,decision_confidence:plan.confidence,evidence_adequacy:plan.evidence_adequacy,response_burden:plan.response_burden,highest_uncertainty:plan.highest_uncertainty||{},proposed_question:plan.proposed_question||null,risk:plan.risk||{},reason:plan.reason,policy_version:plan.policy_version}});
+  return {mode:'executive_policy',decisionId:rows[0]?.id||null,runType,action:plan.action,confidence:plan.confidence,reason:plan.reason,evidenceAdequacy:plan.evidence_adequacy,responseBurden:plan.response_burden,highestUncertainty:plan.highest_uncertainty,proposedQuestion:plan.proposed_question,uncertainty:plan.uncertainty_map.slice(0,5),risk:plan.risk,policyVersion:plan.policy_version};
+}
+
+async function counterfactualAction(userId,body){
+  const runType=RUN_TYPES.has(String(body.runType||''))?String(body.runType):'relationship';
+  const purposes=PURPOSE_BY_RUN[runType]||PURPOSE_BY_RUN.relationship;
+  const candidateUserId=body.context?.candidateUserId||body.context?.objectUserId||null;
+  const [context,dyadContext,recentQuestions]=await Promise.all([loadUserContext(userId,purposes),candidateUserId&&['match','post_date','relationship'].includes(runType)?loadDyadContext(userId,candidateUserId):Promise.resolve(null),loadRecentQuestions(userId)]);
+  const comparison=compareCounterfactuals({runType,message:String(body.message||''),options:Array.isArray(body.options)?body.options:[],context,dyadContext,recentQuestions,candidateUserId,userValues:body.userValues&&typeof body.userValues==='object'?body.userValues:{}});
+  const setRows=await rest('/wonder_mind_counterfactual_sets?select=id',{method:'POST',admin:true,prefer:'return=representation',body:{user_id:userId,candidate_user_id:candidateUserId,run_type:runType,question:String(body.message||'').slice(0,4000),executive_action:comparison.executive_action,executive_reason:comparison.executive_reason,recommended_option_id:comparison.recommended_option_id,recommendation_confidence:comparison.recommendation_confidence,policy_version:comparison.policy_version,caveat:comparison.caveat}});
+  const setId=setRows[0]?.id||null;
+  if(setId&&comparison.branches.length)await rest('/wonder_mind_counterfactual_branches',{method:'POST',admin:true,prefer:'return=minimal',body:comparison.branches.map(b=>({set_id:setId,user_id:userId,option_id:b.option_id,label:b.label,archetype:b.archetype,heuristic_utility:b.heuristic_utility,comparison_confidence:b.comparison_confidence,dimensions:b.dimensions,plausible_upside:b.plausible_upside,plausible_downside:b.plausible_downside,evidence_needed:b.evidence_needed,causal_status:b.causal_status}))});
+  return {mode:'counterfactual',setId,runType,recommendedOptionId:comparison.recommended_option_id,recommendationConfidence:comparison.recommendation_confidence,executiveAction:comparison.executive_action,executiveReason:comparison.executive_reason,branches:comparison.branches,caveat:comparison.caveat,policyVersion:comparison.policy_version};
+}
+
+async function decisionOutcomeAction(userId,body){
+  const setId=String(body.setId||'');const chosenOptionId=String(body.chosenOptionId||'');
+  if(!setId||!chosenOptionId)throw Object.assign(new Error('setId and chosenOptionId are required'),{code:'WONDER_DECISION_OUTCOME_INPUT'});
+  const [sets,branches]=await Promise.all([
+    rest(`/wonder_mind_counterfactual_sets?id=eq.${encodeURIComponent(setId)}&user_id=eq.${encodeURIComponent(userId)}&select=id,user_id,run_type,recommended_option_id,recommendation_confidence,policy_version,created_at&limit=1`,{admin:true}),
+    rest(`/wonder_mind_counterfactual_branches?set_id=eq.${encodeURIComponent(setId)}&user_id=eq.${encodeURIComponent(userId)}&select=id,option_id,label,archetype,heuristic_utility,comparison_confidence,dimensions,created_at`,{admin:true})
+  ]);
+  const set=sets[0];if(!set)throw Object.assign(new Error('Decision set not found'),{code:'WONDER_DECISION_SET_NOT_FOUND'});
+  const chosenBranch=branches.find(b=>b.option_id===chosenOptionId);if(!chosenBranch)throw Object.assign(new Error('Chosen option not found in decision set'),{code:'WONDER_DECISION_BRANCH_NOT_FOUND'});
+  const elapsedDays=Math.max(0,(Date.now()-new Date(set.created_at).getTime())/86400000);
+  const evaluation=evaluateDecisionOutcome({set,chosenBranch,branches,outcome:body.outcome&&typeof body.outcome==='object'?body.outcome:{},evidenceCount:Math.max(0,Number(body.evidenceCount)||0),timeElapsedDays:elapsedDays,externalEvents:Boolean(body.externalEvents)});
+  const rows=await rest('/wonder_mind_decision_outcomes?on_conflict=counterfactual_set_id,user_id&select=id',{method:'POST',admin:true,prefer:'resolution=merge-duplicates,return=representation',body:{user_id:userId,counterfactual_set_id:setId,chosen_branch_id:chosenBranch.id,chosen_option_id:evaluation.chosen_option_id,chosen_was_recommended:evaluation.chosen_was_recommended,predicted_heuristic_utility:evaluation.predicted_heuristic_utility,observed_utility:evaluation.observed_utility,attribution_confidence:evaluation.attribution_confidence,recommendation_confidence:evaluation.recommendation_confidence,quality_label:evaluation.quality_label,utility_error:evaluation.utility_error,regret_signal:evaluation.regret_signal,surprise:evaluation.surprise,calibration_weight:evaluation.calibration_weight,normalized_outcome:evaluation.normalized_outcome,counterfactual_restraint:evaluation.counterfactual_restraint,learning_rule:evaluation.learning_rule,outcome_evidence:{evidence_count:Math.max(0,Number(body.evidenceCount)||0)},external_events:Boolean(body.externalEvents),time_elapsed_days:elapsedDays,policy_version:evaluation.policy_version,updated_at:new Date().toISOString()}});
+  await rest('/rpc/refresh_wonder_mind_decision_policy_metrics',{method:'POST',admin:true,prefer:'return=minimal',body:{p_policy_version:evaluation.policy_version}}).catch(()=>null);
+  return {mode:'decision_outcome',outcomeId:rows[0]?.id||null,setId,chosenOptionId,chosenWasRecommended:evaluation.chosen_was_recommended,observedUtility:evaluation.observed_utility,predictedUtility:evaluation.predicted_heuristic_utility,attributionConfidence:evaluation.attribution_confidence,qualityLabel:evaluation.quality_label,utilityError:evaluation.utility_error,regretSignal:evaluation.regret_signal,surprise:evaluation.surprise,learningRule:evaluation.learning_rule,counterfactualRestraint:evaluation.counterfactual_restraint,policyVersion:evaluation.policy_version};
+}
+
+module.exports=async function handler(req,res){
+  res.setHeader('Cache-Control','no-store, private');res.setHeader('X-Content-Type-Options','nosniff');
+  if(req.method!=='POST'){res.setHeader('Allow','POST');return res.status(405).json({error:'Method not allowed'});}
+  const token=bearer(req),user=await authUser(token);if(!user?.id)return res.status(401).json({error:'Authentication required'});
+  try{
+    const body=typeof req.body==='string'?JSON.parse(req.body):(req.body||{});
+    if(body.action==='curiosity')return res.status(200).json(await curiosityAction(user.id,body));
+    if(body.action==='executive_policy')return res.status(200).json(await executivePolicyAction(user.id,body));
+    if(body.action==='counterfactual')return res.status(200).json(await counterfactualAction(user.id,body));
+    if(body.action==='decision_outcome')return res.status(200).json(await decisionOutcomeAction(user.id,body));
+    if(body.action==='question_answered'){
+      if(!body.questionId||!body.answerEventId)return res.status(400).json({error:'questionId and answerEventId are required.'});
+      await recordQuestionAnswer({questionId:String(body.questionId),userId:user.id,answerEventId:String(body.answerEventId)});return res.status(200).json({ok:true});
+    }
+    const message=String(body.message||'').trim();if(!message)return res.status(400).json({error:'Tell Wonder what you are thinking first.'});
+    if(message.length>MAX_MESSAGE)return res.status(413).json({error:'This reflection is too long for a single reasoning turn.'});
+    const requestedType=String(body.runType||'chat'),runType=RUN_TYPES.has(requestedType)?requestedType:'chat';await enforceRunRate(user.id);
+    const result=await runMind({userId:user.id,runType,message,history:cleanHistory(body.history),payload:body.context&&typeof body.context==='object'?body.context:{}});return res.status(200).json(result);
+  }catch(err){
+    console.error('Wonder Mind runtime error',{code:err.code,message:err.message});
+    if(err.code==='WONDER_MIND_RATE_LIMIT')return res.status(429).json({error:'Wonder needs a moment before another reasoning turn.',code:err.code});
+    if(err.code==='WONDER_DECISION_OUTCOME_INPUT'||err.code==='WONDER_DECISION_BRANCH_NOT_FOUND')return res.status(400).json({error:err.message,code:err.code});
+    if(err.code==='WONDER_DECISION_SET_NOT_FOUND')return res.status(404).json({error:err.message,code:err.code});
+    if(err.code==='WONDER_MODEL_NOT_CONFIGURED')return res.status(503).json({error:'Wonder Mind inference substrate is not configured yet.',code:err.code});
+    if(err.code==='WONDER_MODEL_TIMEOUT')return res.status(504).json({error:'Wonder Mind took too long to complete this reasoning run.',code:err.code});
+    return res.status(503).json({error:'Wonder Mind could not complete this reasoning run.',code:err.code||'WONDER_MIND_ERROR'});
+  }
+};

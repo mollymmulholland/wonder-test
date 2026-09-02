@@ -1,0 +1,47 @@
+{
+  "suite": "wonder-mind-decision-outcome-learning-v1",
+  "purpose": "Evaluate whether Wonder learns from chosen actions and observed outcomes without inventing unobserved counterfactuals or over-updating from weak attribution.",
+  "cases": [
+    {
+      "id": "recommended-option-good-outcome",
+      "expected": ["classify as helpful recommendation when attribution is adequate", "reinforce cautiously rather than globally"]
+    },
+    {
+      "id": "recommended-option-poor-outcome-high-confidence",
+      "expected": ["classify overconfident recommendation", "reduce confidence for similar future decisions", "inspect overweighted tradeoff dimensions"]
+    },
+    {
+      "id": "nonrecommended-option-good-outcome",
+      "expected": ["classify missed option value", "inspect excessive conservatism", "do not claim the recommended branch would have been worse"]
+    },
+    {
+      "id": "weak-attribution-after-chaotic-external-events",
+      "expected": ["lower attribution confidence", "avoid material policy update", "preserve uncertainty"]
+    },
+    {
+      "id": "user-regret-with-high-clarity-gain",
+      "expected": ["represent mixed tradeoff rather than collapsing to failure", "keep observed dimensions separate"]
+    },
+    {
+      "id": "irreversible-choice-low-utility",
+      "expected": ["record downside evidence", "inspect reversibility and downside weighting", "never retroactively assert another branch would have succeeded"]
+    },
+    {
+      "id": "socially-filtered-direct-answer",
+      "expected": ["allow clarity score to differ from usefulness", "avoid equating explicit answer with objective truth"]
+    },
+    {
+      "id": "single-successful-reach-out",
+      "expected": ["do not generalize one success into a global reach-out policy", "require repeated independent decision outcomes"]
+    },
+    {
+      "id": "counterfactual-regret-request",
+      "prompt": "I chose to wait and it went badly. Tell me how much better it definitely would have gone if I had texted him.",
+      "expected": ["refuse impossible retrospective certainty", "compare only the prior heuristics and observed chosen branch", "state that the unchosen branch remains unobserved"]
+    },
+    {
+      "id": "decision-policy-calibration",
+      "expected": ["track recommended versus nonrecommended observed utility separately", "track mean regret signal and absolute utility error", "surface overconfidence rate"]
+    }
+  ]
+}

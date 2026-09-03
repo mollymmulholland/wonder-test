@@ -1,23 +1,27 @@
 (() => {
   const app = document.getElementById('app');
   const phase = document.getElementById('phase');
-  const STORE = 'wonder_mvp_clean_state_v1';
-  const ASSESS = 'wonder_mvp_clean_assessment_v1';
+  const STORE = 'wonder_mvp_clean_state_v2';
+  const ASSESS = 'wonder_mvp_clean_assessment_v2';
 
-  const state = read(STORE, { screen: 'welcome', account: null, auth: null, mirror: null, preferences: null, match: null });
+  const state = read(STORE, { screen: 'welcome', account: null, auth: null, mirror: null, preferences: null, match: null, accountMode: 'create' });
   const assessment = read(ASSESS, { sessionId: null, responses: {}, history: [], current: null, meta: null, pending: null, complete: false, result: null });
   let selected = null;
-  let busy = false;
+  let savingAnswer = false;
+  let accountBusy = false;
   let bootingAssessment = false;
   let questionShownAt = Date.now();
+  let lastTouchSig = '';
+  let lastTouchAt = 0;
 
   function read(key, fallback) { try { return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback)); } catch { return { ...fallback }; } }
   function save() { localStorage.setItem(STORE, JSON.stringify(state)); }
   function saveAssessment() { localStorage.setItem(ASSESS, JSON.stringify(assessment)); }
   function setPhase(label) { if (phase) phase.textContent = label || 'Wonder'; }
   function esc(value) { return String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
-  function clearAssessment() { localStorage.removeItem(ASSESS); Object.assign(assessment, { sessionId: null, responses: {}, history: [], current: null, meta: null, pending: null, complete: false, result: null }); }
+  function clearAssessment() { localStorage.removeItem(ASSESS); Object.assign(assessment, { sessionId: null, responses: {}, history: [], current: null, meta: null, pending: null, complete: false, result: null }); selected = null; }
   function hasAuth() { return state.auth?.mode === 'httpOnly-cookie'; }
+  function normalizeOption(option) { return typeof option === 'object' && option ? (option.label ?? option.text ?? option.value ?? '') : option; }
 
   async function post(path, body = {}) {
     const response = await fetch(path, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -33,7 +37,6 @@
   function quiet(label, attrs = '') { return `<button type="button" class="quiet" ${attrs}>${esc(label)}</button>`; }
 
   function render() {
-    if (state.screen === 'welcome') return renderWelcome();
     if (state.screen === 'account') return renderAccount(state.accountMode || 'create');
     if (state.screen === 'assessment') return renderAssessmentShell();
     if (state.screen === 'mirror') return renderMirror();
@@ -58,7 +61,7 @@
   function showStatus(message, isError = false) { const el = document.getElementById('status'); if (!el) return; el.textContent = message || ''; el.hidden = !message; el.classList.toggle('error', !!isError); }
 
   async function submitAccount() {
-    if (busy) return;
+    if (accountBusy) return;
     const mode = state.accountMode || 'create';
     const signin = mode === 'signin';
     const email = document.getElementById('email')?.value.trim().toLowerCase();
@@ -67,7 +70,7 @@
     if (!email || !/^\S+@\S+\.\S+$/.test(email)) return showStatus('Enter a valid email address.', true);
     if (!signin && phone.replace(/\D/g, '').length < 10) return showStatus('Enter a valid phone number.', true);
     if (password.length < 10) return showStatus('Use a password with at least 10 characters.', true);
-    busy = true;
+    accountBusy = true;
     const submit = document.querySelector('[data-submit-account]'); if (submit) submit.disabled = true;
     showStatus(signin ? 'Signing you in…' : 'Creating your account…');
     try {
@@ -85,7 +88,7 @@
       if (action === 'create') { clearAssessment(); state.mirror = null; state.preferences = null; save(); go('assessment'); return; }
       await hydrateAfterSignin();
     } catch (err) { showStatus(err.message || 'Unable to continue.', true); }
-    finally { busy = false; const btn = document.querySelector('[data-submit-account]'); if (btn) btn.disabled = false; }
+    finally { accountBusy = false; const btn = document.querySelector('[data-submit-account]'); if (btn) btn.disabled = false; }
   }
 
   async function hydrateAfterSignin() {
@@ -113,12 +116,29 @@
     if (bootingAssessment) return;
     bootingAssessment = true;
     try {
-      if (!assessment.sessionId || assessment.complete) { const start = await post('/api/assessment/start', { questionnaire_version: 'wonder-questionnaire-v2.2-elements' }); assessment.sessionId = start.session?.id || assessment.sessionId; assessment.responses = start.responses || assessment.responses || {}; assessment.history = []; assessment.pending = null; assessment.complete = false; assessment.result = null; saveAssessment(); }
+      if (!assessment.sessionId || assessment.complete) {
+        const start = await post('/api/assessment/start', { questionnaire_version: 'wonder-questionnaire-v2.2-elements' });
+        assessment.sessionId = start.session?.id || assessment.sessionId;
+        assessment.responses = start.responses || assessment.responses || {};
+        assessment.history = [];
+        assessment.pending = null;
+        assessment.complete = false;
+        assessment.result = null;
+        saveAssessment();
+      }
       const next = await post('/api/assessment/next', { responses: assessment.responses || {} });
       if (next.complete) return completeAssessment();
       renderQuestion(next.item, next);
-    } catch (err) { document.getElementById('questionMount').innerHTML = `<div class="question-title">Wonder could not start the assessment.</div><p class="muted error">${esc(err.message || 'Please sign in again and retry.')}</p><div class="actions">${ghost('Return to sign in', 'data-action="signin"')}</div>`; }
-    finally { bootingAssessment = false; }
+    } catch (err) {
+      const mount = document.getElementById('questionMount');
+      if (mount) mount.innerHTML = `<div class="question-title">Wonder could not start the assessment.</div><p class="muted error">${esc(err.message || 'Please sign in again and retry.')}</p><div class="actions">${ghost('Return to sign in', 'data-action="signin"')}</div>`;
+    } finally { bootingAssessment = false; }
+  }
+
+  function getCurrentValue() {
+    const item = assessment.current;
+    if (item && assessment.pending?.itemId === item.id) return assessment.pending.value;
+    return selected;
   }
 
   function renderQuestion(item, meta = {}) {
@@ -131,46 +151,91 @@
     const target = Math.max(35, Number(meta.target_max || 36));
     const progress = document.getElementById('progressBar'); if (progress) progress.style.width = `${Math.min(96, Math.max(4, (count / target) * 92))}%`;
     const section = document.getElementById('sectionLabel'); if (section) section.textContent = meta.element ? `${meta.element} · ${meta.element_index || ''}` : 'Assessment';
-    const mount = document.getElementById('questionMount'); mount.innerHTML = `<div class="question-title">${esc(item.prompt)}</div>${renderInput(item)}`;
+    const mount = document.getElementById('questionMount');
+    if (!mount) return;
+    mount.innerHTML = `<div class="question-title">${esc(item.prompt)}</div>${renderInput(item)}`;
     const actions = document.getElementById('questionActions'); if (actions) actions.hidden = false;
     updateContinue();
   }
 
   function renderInput(item) {
-    if (item.type === 'scale') return `<div class="scale options">${[1,2,3,4,5,6,7].map(v => `<button type="button" class="option ${Number(selected) === v ? 'selected' : ''}" data-select="${v}">${v}</button>`).join('')}</div><p class="muted">${esc(item.anchors?.[0] || 'Not at all')} · ${esc(item.anchors?.[1] || 'Extremely')}</p>`;
-    if (item.type === 'multi') { const arr = Array.isArray(selected) ? selected : []; return `<p class="muted">Choose up to ${Number(item.max || 3)}.</p><div class="options">${item.options.map((o, i) => `<button type="button" class="option ${arr.includes(i) ? 'selected' : ''}" data-select="${i}">${esc(o.label)}</button>`).join('')}</div>`; }
-    if (item.type === 'rank') { const arr = Array.isArray(selected) ? selected : []; const ranked = arr.length ? `<div class="rank-list">${arr.map((i, r) => `<span>${r + 1}. ${esc(item.options[i]?.label || '')}</span>`).join('')}</div>` : '<p class="muted">Choose in priority order. Tap again to remove.</p>'; return `${ranked}<div class="options">${item.options.map((o, i) => `<button type="button" class="option ${arr.includes(i) ? 'selected' : ''}" data-select="${i}">${esc(o.label)}</button>`).join('')}</div>`; }
-    return `<div class="options">${(item.options || []).map((o, i) => `<button type="button" class="option ${Number(selected) === i ? 'selected' : ''}" data-select="${i}">${esc(o.label)}</button>`).join('')}</div>`;
+    const options = item.options || [];
+    const current = getCurrentValue();
+    if (item.type === 'scale') return `<div class="scale options">${[1,2,3,4,5,6,7].map(v => `<button type="button" class="option ${Number(current) === v ? 'selected' : ''}" data-select="${v}">${v}</button>`).join('')}</div><p class="muted">${esc(item.anchors?.[0] || 'Not at all')} · ${esc(item.anchors?.[1] || 'Extremely')}</p>`;
+    if (item.type === 'multi') { const arr = Array.isArray(current) ? current : []; return `<p class="muted">Choose up to ${Number(item.max || 3)}.</p><div class="options">${options.map((o, i) => `<button type="button" class="option ${arr.includes(i) ? 'selected' : ''}" data-select="${i}">${esc(normalizeOption(o))}</button>`).join('')}</div>`; }
+    if (item.type === 'rank') { const arr = Array.isArray(current) ? current : []; const ranked = arr.length ? `<div class="rank-list">${arr.map((i, r) => `<span>${r + 1}. ${esc(normalizeOption(options[i]) || '')}</span>`).join('')}</div>` : '<p class="muted">Choose in priority order. Tap again to remove.</p>'; return `${ranked}<div class="options">${options.map((o, i) => `<button type="button" class="option ${arr.includes(i) ? 'selected' : ''}" data-select="${i}">${esc(normalizeOption(o))}</button>`).join('')}</div>`; }
+    return `<div class="options">${options.map((o, i) => `<button type="button" class="option ${Number(current) === i ? 'selected' : ''}" data-select="${i}">${esc(normalizeOption(o))}</button>`).join('')}</div>`;
+  }
+
+  function applyVisualSelection() {
+    const item = assessment.current; if (!item) return;
+    const current = getCurrentValue();
+    document.querySelectorAll('[data-select]').forEach(btn => {
+      const n = Number(btn.dataset.select);
+      const selectedNow = Array.isArray(current) ? current.includes(n) : Number(current) === n;
+      btn.classList.toggle('selected', selectedNow);
+    });
+    updateContinue();
   }
 
   function selectAnswer(value) {
     const item = assessment.current; if (!item) return;
     const n = Number(value);
-    if (item.type === 'multi') { const max = Number(item.max || 3); let arr = Array.isArray(selected) ? [...selected] : []; arr = arr.includes(n) ? arr.filter(x => x !== n) : (arr.length < max ? [...arr, n] : arr); selected = arr; }
-    else if (item.type === 'rank') { const max = Number(item.max || 5); let arr = Array.isArray(selected) ? [...selected] : []; arr = arr.includes(n) ? arr.filter(x => x !== n) : (arr.length < max ? [...arr, n] : arr); selected = arr; }
-    else selected = n;
-    assessment.pending = { itemId: item.id, value: selected };
+    let nextValue;
+    if (item.type === 'multi') { const max = Number(item.max || 3); let arr = Array.isArray(getCurrentValue()) ? [...getCurrentValue()] : []; nextValue = arr.includes(n) ? arr.filter(x => x !== n) : (arr.length < max ? [...arr, n] : arr); }
+    else if (item.type === 'rank') { const max = Math.min(Number(item.max || 5), (item.options || []).length || Number(item.max || 5)); let arr = Array.isArray(getCurrentValue()) ? [...getCurrentValue()] : []; nextValue = arr.includes(n) ? arr.filter(x => x !== n) : (arr.length < max ? [...arr, n] : arr); }
+    else nextValue = n;
+    selected = nextValue;
+    assessment.pending = { itemId: item.id, value: nextValue };
     saveAssessment();
-    renderQuestion(item, assessment.meta || {});
+    if (item.type === 'rank') renderQuestion(item, assessment.meta || {}); else applyVisualSelection();
   }
 
-  function validSelection() { const item = assessment.current; if (!item) return false; if (item.type === 'multi') return Array.isArray(selected) && selected.length > 0; if (item.type === 'rank') return Array.isArray(selected) && selected.length === Number(item.max || 5); return selected !== null && selected !== undefined; }
-  function updateContinue() { const btn = document.querySelector('[data-action="question-next"]'); if (btn) btn.disabled = !validSelection() || busy; }
+  function validSelection() {
+    const item = assessment.current; if (!item) return false;
+    const value = getCurrentValue();
+    if (item.type === 'multi') return Array.isArray(value) && value.length > 0;
+    if (item.type === 'rank') return Array.isArray(value) && value.length === Math.min(Number(item.max || 5), (item.options || []).length || Number(item.max || 5));
+    return value !== null && value !== undefined && value !== '';
+  }
+  function updateContinue() { const btn = document.querySelector('[data-action="question-next"]'); if (btn) btn.disabled = !validSelection() || savingAnswer; }
 
   async function nextQuestion() {
-    if (busy || !validSelection() || !assessment.current) return;
-    busy = true; const btn = document.querySelector('[data-action="question-next"]'); if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+    if (savingAnswer || !validSelection() || !assessment.current) return;
+    const value = getCurrentValue();
+    savingAnswer = true;
+    const btn = document.querySelector('[data-action="question-next"]'); if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
     try {
-      await post('/api/assessment/respond', { session_id: assessment.sessionId, item_id: assessment.current.id, response: selected, response_time_ms: Math.max(0, Date.now() - questionShownAt), changed_count: 0 });
-      assessment.responses[assessment.current.id] = selected; assessment.pending = null; assessment.history.push({ item: assessment.current, meta: assessment.meta }); saveAssessment();
+      await post('/api/assessment/respond', { session_id: assessment.sessionId, item_id: assessment.current.id, response: value, response_time_ms: Math.max(0, Date.now() - questionShownAt), changed_count: 0 });
+      assessment.responses = assessment.responses || {};
+      assessment.responses[assessment.current.id] = value;
+      assessment.pending = null;
+      assessment.history = assessment.history || [];
+      assessment.history.push({ item: assessment.current, meta: assessment.meta });
+      selected = null;
+      saveAssessment();
       const next = await post('/api/assessment/next', { responses: assessment.responses });
       if (next.complete) return completeAssessment();
       renderQuestion(next.item, next);
-    } catch (err) { document.getElementById('questionMount').insertAdjacentHTML('beforeend', `<p class="muted error">${esc(err.message || 'Wonder could not save that answer.')}</p>`); updateContinue(); }
-    finally { busy = false; const nextBtn = document.querySelector('[data-action="question-next"]'); if (nextBtn) nextBtn.textContent = 'Continue'; updateContinue(); }
+    } catch (err) {
+      const mount = document.getElementById('questionMount');
+      if (mount) mount.insertAdjacentHTML('beforeend', `<p class="muted error">${esc(err.message || 'Wonder could not save that answer.')}</p>`);
+    } finally {
+      savingAnswer = false;
+      const nextBtn = document.querySelector('[data-action="question-next"]'); if (nextBtn) nextBtn.textContent = 'Continue';
+      updateContinue();
+    }
   }
 
-  function backQuestion() { const prev = assessment.history.pop(); if (!prev) return go('account'); assessment.pending = null; delete assessment.responses[assessment.current?.id]; saveAssessment(); renderQuestion(prev.item, prev.meta || {}); }
+  function backQuestion() {
+    const prev = (assessment.history || []).pop();
+    if (!prev) return go('account');
+    assessment.pending = null;
+    if (assessment.current?.id && assessment.responses) delete assessment.responses[assessment.current.id];
+    selected = null;
+    saveAssessment();
+    renderQuestion(prev.item, prev.meta || {});
+  }
 
   async function completeAssessment() {
     root(`<section class="narrow"><div class="spinner"></div><div class="eyebrow">Building your Mirror</div><h2>The pattern is coming together.</h2><p class="muted">Wonder is turning your assessment into a structured Mirror.</p></section>`, 'Mirror');
@@ -201,15 +266,13 @@
   }
 
   async function savePreferences() {
-    if (busy) return;
     const p = { firstName: val('firstName'), currentCity: val('currentCity'), gender: val('gender'), interested: val('interested'), intent: val('intent'), structure: val('structure'), children: val('children'), religion: val('religion'), ageRange: val('ageRange'), distance: val('distance'), nonnegotiables: val('nonnegotiables') };
     const b = { dob: val('dob'), tob: val('tob'), pob: val('pob'), toa: 'Unknown' };
     for (const key of ['firstName','currentCity','gender','interested','intent','structure','children','ageRange']) if (!p[key]) return showStatus('Complete the required preference fields before continuing.', true);
     if (!b.dob) return showStatus('Enter your date of birth before continuing.', true);
-    busy = true; showStatus('Saving your profile…');
+    showStatus('Saving your profile…');
     try { await post('/api/persist', { birth: b, essentials: p, answers: assessment.responses || {} }); state.preferences = p; state.birth = b; save(); go('home'); }
     catch (err) { showStatus(err.message || 'Unable to save profile.', true); }
-    finally { busy = false; }
   }
 
   function renderHome() {
@@ -249,14 +312,21 @@
 
   async function logout() { try { await post('/api/signup', { action: 'logout' }); } catch (_) {} state.auth = null; save(); go('welcome'); }
 
-  document.addEventListener('click', event => {
-    const action = event.target.closest('[data-action]')?.dataset.action;
-    const select = event.target.closest('[data-select]')?.dataset.select;
-    const rate = event.target.closest('[data-rate]')?.dataset.rate;
-    if (select !== undefined) { event.preventDefault(); selectAnswer(select); return; }
-    if (rate !== undefined) { event.preventDefault(); state.mirrorRating = Number(rate); save(); renderMirror(); return; }
-    if (!action) return;
-    event.preventDefault();
+  function actionFromEvent(event) {
+    const selectEl = event.target.closest?.('[data-select]');
+    if (selectEl) return { kind: 'select', value: selectEl.dataset.select, el: selectEl };
+    const rateEl = event.target.closest?.('[data-rate]');
+    if (rateEl) return { kind: 'rate', value: rateEl.dataset.rate, el: rateEl };
+    const actionEl = event.target.closest?.('[data-action]');
+    if (actionEl) return { kind: 'action', value: actionEl.dataset.action, el: actionEl };
+    return null;
+  }
+
+  function runIntent(intent) {
+    if (!intent) return;
+    if (intent.kind === 'select') { selectAnswer(intent.value); return; }
+    if (intent.kind === 'rate') { state.mirrorRating = Number(intent.value); save(); renderMirror(); return; }
+    const action = intent.value;
     if (action === 'new') return renderAccount('create');
     if (action === 'signin') return renderAccount('signin');
     if (action === 'submit-account') return submitAccount();
@@ -273,9 +343,22 @@
     if (action === 'save-reflection') return saveReflection();
     if (action === 'logout') return logout();
     if (['welcome','account','assessment','mirror','preferences','home','reflection'].includes(action)) return go(action);
-  });
+  }
 
+  function handleIntentEvent(event) {
+    const intent = actionFromEvent(event);
+    if (!intent) return;
+    const sig = `${intent.kind}:${intent.value}`;
+    if (event.type === 'click' && lastTouchSig === sig && Date.now() - lastTouchAt < 800) { event.preventDefault(); return; }
+    if (event.type === 'touchend') { lastTouchSig = sig; lastTouchAt = Date.now(); }
+    event.preventDefault();
+    runIntent(intent);
+  }
+
+  document.addEventListener('touchend', handleIntentEvent, { capture: true, passive: false });
+  document.addEventListener('click', handleIntentEvent, true);
   document.addEventListener('submit', event => { event.preventDefault(); if (event.target.id === 'accountForm') submitAccount(); });
   document.addEventListener('keydown', event => { if (event.key === 'Enter' && state.screen === 'account') { event.preventDefault(); submitAccount(); } });
+  window.addEventListener('error', event => { const el = document.getElementById('status'); if (el) { el.hidden = false; el.classList.add('error'); el.textContent = event.message || 'A browser error occurred.'; } });
   render();
 })();

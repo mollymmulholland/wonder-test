@@ -1,16 +1,8 @@
-const {scoreResponses,inferArchetypes}=require('../lib/person-model');
-const {buildMirror}=require('../lib/mirror-engine');
-
+// Legacy prototype endpoint intentionally disabled.
+// Production assessment scoring occurs only through /api/assessment/complete,
+// where the server loads responses owned by the authenticated user.
 module.exports=async function handler(req,res){
-  if(req.method!=='POST'){res.setHeader('Allow','POST');return res.status(405).json({error:'Method not allowed.'});}
-  try{
-    const responses=req.body?.responses||{};
-    const model=scoreResponses(responses);
-    const archetypes=inferArchetypes(model);
-    const mirror=buildMirror(model,archetypes);
-    return res.status(200).json({model,archetypes,mirror});
-  }catch(e){
-    console.error('assessment-score',e);
-    return res.status(500).json({error:'Wonder could not finish the portrait yet.'});
-  }
+ res.setHeader('Cache-Control','no-store, max-age=0');
+ res.setHeader('X-Robots-Tag','noindex, nofollow, nosnippet');
+ return res.status(410).json({error:'This endpoint has been retired.'});
 };

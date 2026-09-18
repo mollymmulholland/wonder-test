@@ -31,12 +31,15 @@ Archetypes and matching scores are product hypotheses, not validated psychometri
 - Hosted protected preview: account creation/sign-in, 45 saved answers, backend assignment (Catalyst in the synthetic run), persisted personalized report, preferences, journal save/reload, post-date reflection, matching empty state, logout, and rejected signed-out journal access.
 - Browser: welcome/home, all-20 report selector, portrait-to-journal prompt, journal save, fictional introduction reaction, five-rating date reflection, guided mirror exchange, pool tap, and quiz forward/back with answer retention.
 - Local: three complete adaptive assessments (41/45/45 responses), all report definitions, malformed input rejection, unauthenticated access and origin checks; existing archetype, precision, and matching suites.
-- Production asset build succeeds; backend files are excluded from public output. One allowlisted Vercel API router keeps this within the current Hobby function limit.
+- Production asset build succeeds; backend files are excluded from public output. One allowlisted Vercel API router serves the application.
 - Applied migrations seed the twenty reports and fix the pre-existing shared event trigger, which attempted to read a nonexistent status column on model snapshots and journal rows.
 - The disposable synthetic account and its linked records were removed after verification. Existing users, waitlist records, and the independent demo dataset were not altered.
 
 ## Remaining release dependencies
 - Live AI is wired but the connected provider returned HTTP 429 / credit_balance_exhausted. Replenish provider credits and rerun a signed-in Mirror exchange before enabling AI for beta testers. No successful live AI generation or chat-history persistence is claimed. The demo explicitly uses written guided responses.
-- This is a protected demo / controlled-beta preview, not an unrestricted public launch. The inherited preview account flow auto-confirms email and has no recovery screen. Email verification/recovery and durable abuse controls need a public-launch pass.
+- Verified signup and password recovery now use server-bound PKCE, signed HttpOnly recovery cookies, and durable database request limits. Provider-mocked contract tests cover confirmation enforcement, expired/tampered links, account-bound recovery, token privacy, session revocation, and origin checks. No real email was sent during this test pass.
+- Supabase public settings confirm email confirmation is enabled. Custom SMTP delivery and the exact deployment/branch redirect allowlist still require verification in the authenticated Supabase dashboard before inviting beta users. The dashboard is not signed in in this session.
+- Add the intended HTTPS app origins to Supabase Auth URL Configuration. For custom domains, also set WONDER_AUTH_ORIGINS on Vercel. The confirmation/reset link must be opened in the browser that requested it.
+- The preview-only /layout-check page renders the deployed app at selected CSS viewport widths; it is excluded from production builds.
 - Responsive breakpoints and reduced-motion styles are implemented. Desktop browser verification passed; physical mobile/Safari and assistive-technology testing remain before a wider release.
 - The real match pool is empty; the demonstrated Rowan introduction is fictional and does not populate real account matching.

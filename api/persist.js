@@ -315,6 +315,7 @@ module.exports = async function handler(req, res) {
     }
 
     const { birth, essentials, answers, places = {} } = body;
+    if(birth?.dob){const date=new Date(birth.dob+'T00:00:00Z'),cutoff=new Date();cutoff.setUTCFullYear(cutoff.getUTCFullYear()-18);if(!Number.isFinite(date.getTime())||date>cutoff) return res.status(400).json({error:'WONDER is for adults aged 18 and older.'});}
 
     if (birth) {
       await upsertOptionalLocation('birth_data', {
@@ -349,7 +350,7 @@ module.exports = async function handler(req, res) {
 
     if (answers && typeof answers === 'object') {
       const rows = Object.entries(answers)
-        .filter(([, value]) => Number.isInteger(Number(value)))
+        .filter(([key, value]) => /^\d+$/.test(key) && Number.isInteger(Number(value)))
         .slice(0, 200)
         .map(([questionId, answerIndex]) => ({
           user_id: uid,

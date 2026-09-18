@@ -1,19 +1,10 @@
 const {nextItem}=require('../../lib/adaptive-assessment');
-const {elementExperience}=require('../../lib/element-experience');
-
-module.exports=async function handler(req,res){
- if(req.method!=='POST')return res.status(405).json({error:'Method not allowed.'});
- try{
-   const responses=req.body?.responses||{};
-   const result=nextItem(responses);
-   if(result.item){
-     const {options,...rest}=result.item;
-     result.item={...rest,options:options?.map(({w,dimension,...o})=>o)};
-     result.experience=elementExperience(result.item,result.element||'Ether');
-   }
-   return res.status(200).json(result);
- }catch(e){
-   console.error('assessment next',e);
-   return res.status(500).json({error:'Unable to choose the next question.'});
- }
+const {secureApi}=require('../../lib/api-security');
+const {validateAnswers}=require('../../lib/assessment-validation');
+module.exports=async(req,res)=>{
+ if(!secureApi(req,res))return;
+ try {const result=nextItem(validateAnswers(req.body?.responses||{}));
+ if(result.item){const {options,scale,...item}=result.item;result.item={...item,options:options?.map(({w,dimension,...o})=>o)};}
+ return res.status(200).json(result);
+ }catch(e){return res.status(400).json({error:'Invalid assessment answers.'});}
 };

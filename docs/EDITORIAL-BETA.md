@@ -3,6 +3,7 @@
 This change extends the existing vanilla-JavaScript/Vercel application and its Supabase backend. It does not replace the production waitlist or either investor site.
 
 ## Experience
+- Interface icons are monochrome inline SVG, never emoji or platform-dependent symbol glyphs. Mirror instructions use the same no-emoji brand rule.
 - Five-element assessment retains the 35 core items and 6–10 adaptive refinement items.
 - Server-side scoring uses the existing 20-archetype v2 model, with primary and secondary interpretations.
 - Each archetype has a complete editorial report; personalized observations remain distinct from generic archetype chapters.

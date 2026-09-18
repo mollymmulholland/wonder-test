@@ -1,364 +1,122 @@
 (() => {
-  const app = document.getElementById('app');
-  const phase = document.getElementById('phase');
-  const STORE = 'wonder_mvp_clean_state_v2';
-  const ASSESS = 'wonder_mvp_clean_assessment_v2';
-
-  const state = read(STORE, { screen: 'welcome', account: null, auth: null, mirror: null, preferences: null, match: null, accountMode: 'create' });
-  const assessment = read(ASSESS, { sessionId: null, responses: {}, history: [], current: null, meta: null, pending: null, complete: false, result: null });
-  let selected = null;
-  let savingAnswer = false;
-  let accountBusy = false;
-  let bootingAssessment = false;
-  let questionShownAt = Date.now();
-  let lastTouchSig = '';
-  let lastTouchAt = 0;
-
-  function read(key, fallback) { try { return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback)); } catch { return { ...fallback }; } }
-  function save() { localStorage.setItem(STORE, JSON.stringify(state)); }
-  function saveAssessment() { localStorage.setItem(ASSESS, JSON.stringify(assessment)); }
-  function setPhase(label) { if (phase) phase.textContent = label || 'Wonder'; }
-  function esc(value) { return String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
-  function clearAssessment() { localStorage.removeItem(ASSESS); Object.assign(assessment, { sessionId: null, responses: {}, history: [], current: null, meta: null, pending: null, complete: false, result: null }); selected = null; }
-  function hasAuth() { return state.auth?.mode === 'httpOnly-cookie'; }
-  function normalizeOption(option) { return typeof option === 'object' && option ? (option.label ?? option.text ?? option.value ?? '') : option; }
-
-  async function post(path, body = {}) {
-    const response = await fetch(path, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) { const err = new Error(data.error || `Request failed (${response.status})`); err.status = response.status; err.data = data; throw err; }
-    return data;
+'use strict';
+const $=s=>document.querySelector(s),main=$('#main'),header=$('#header');
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const eye='<svg viewBox="0 0 80 48" fill="none" aria-hidden="true"><path d="M3 24Q40-9 77 24Q40 57 3 24Z" stroke="currentColor" stroke-width="1.2"/><circle cx="40" cy="24" r="15" stroke="currentColor" stroke-width="1.2"/><circle cx="40" cy="24" r="4" fill="currentColor"/></svg>';
+const icon=path=>`<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="${path}"/></svg>`;
+const arrow=icon('M6 18 18 6M6 6h12v12'),arrowRight=icon('M4 12h16m-7-7 7 7-7 7'),arrowLeft=icon('M20 12H4m7-7-7 7 7 7'),arrowUp=icon('M12 20V4m-7 7 7-7 7 7'),check=icon('m5 12 4 4L19 6');
+const elements=['Earth','Water','Fire','Air','Ether'];
+const descriptions={Earth:'What roots you. What you return to.',Water:'The way you feel. The way you come close.',Fire:'What moves you. What makes you feel alive.',Air:'The shape of your thinking.',Ether:'What gives your life its meaning.'};
+const state={screen:'welcome',mode:null,user:null,name:'',profile:{},birth:{},report:null,assessment:null,entries:[],messages:[],match:null,matchReaction:null,draft:null,reflectionDraft:null,chatDraft:'',conversationId:null,authMode:'signin',catalog:[],busy:false,quizBusy:false};
+let cleanupPool=()=>{},epoch=0,toastTimer,questionStarted=Date.now(),selected=null,returnFromQuiz=false;
+const demoKey='wonder_editorial_demo_v1';
+const readDemo=()=>{try{return JSON.parse(sessionStorage.getItem(demoKey)||'{}')}catch{return {}}};
+function saveDemo(){if(state.mode!=='demo')return;try{sessionStorage.setItem(demoKey,JSON.stringify({name:state.name,report:state.report,entries:state.entries,messages:state.messages,assessment:state.assessment,matchReaction:state.matchReaction,profile:state.profile,draft:state.draft,reflectionDraft:state.reflectionDraft,chatDraft:state.chatDraft}))}catch{toast('This browser could not retain your demo between visits.')}}
+async function api(path,body={},retry=true){const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),25000);let r,d;try{r=await fetch(path,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:controller.signal});d=await r.json().catch(()=>({}));}catch(e){throw new Error(e.name==='AbortError'?'This is taking longer than expected. Please try again.':'The connection was interrupted. Your text is still here.')}finally{clearTimeout(timer)}if(r.status===401&&retry&&state.mode==='beta'){try{await api('/api/signup',{action:'refresh'},false);return api(path,body,false)}catch{throw new Error('Your session expired. Sign in again to continue.')}}if(!r.ok){const e=new Error(d.error||'Unable to continue right now.');e.status=r.status;throw e}return d;}
+const experience=b=>api('/api/experience',b);
+function toast(msg){const el=$('#toast');el.textContent=msg;el.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),3800)}
+function error(msg){const el=$('#status');if(el){el.className='error';el.textContent=msg;el.hidden=false}else toast(msg)}
+function status(msg){const el=$('#status');if(el){el.className='status';el.textContent=msg;el.hidden=!msg}}
+function statusEl(){return '<div id="status" role="status" class="status" hidden></div>'}
+function btn(label,action,extra='',style=''){return `<button class="btn ${style}" type="button" data-action="${action}" ${extra}>${label}</button>`}
+function footer(){return '<footer class="footer"><span>WONDER · Endless transformation. Infinite becoming.</span><span>To be loved is to be seen.</span></footer>'}
+function page(content){return `<div class="page">${content}${footer()}</div>`}
+function heading(kicker,title,aside=''){return `<div class="page-heading"><div><p class="eyebrow">${kicker}</p><h1>${title}</h1></div>${aside?`<p class="lede">${aside}</p>`:''}</div>`}
+function pool(title='A little closer<br><em>to yourself.</em>',action=true){return `<section class="pool"><button class="pool-surface" aria-label="Touch the reflective pool to make a ripple"></button><div class="pool-body"><div class="pool-meta"><span class="eyebrow">The living mirror</span><span class="eyebrow">Touch the water</span></div><div class="pool-center">${eye}<h2>${title}</h2></div><div class="pool-footer"><p class="small">There is more to you<br>than a first impression.</p>${action?btn('Enter your mirror '+arrow,'ai','','light'):''}</div></div></section>`}
+function renderHeader(){const active=state.screen;const nav=state.mode&&active!=='account'&&active!=='welcome';header.innerHTML=`<div class="topbar ${nav?'with-nav':''}"><button class="brand" data-action="${state.mode?'home':'welcome'}" aria-label="WONDER home">${eye}<span>WONDER</span></button>${nav?`<nav class="nav" aria-label="Main navigation">${[['home','Your space'],['report','Your portrait'],['introductions','Introductions'],['journal','Journal'],['ai','Mirror']].map(([s,l])=>`<button data-action="${s}" class="${active===s?'active':''}" ${active===s?'aria-current="page"':''}>${l}</button>`).join('')}</nav><button class="account-button" data-action="settings" aria-label="Profile and settings">${esc((state.name||'You').slice(0,1).toUpperCase())}</button>`:`<button class="text-btn" data-action="signin">Member sign in</button>`}</div>${state.mode==='demo'?'<div class="demo-ribbon"><span>DEMO EXPERIENCE · Fictional profiles · Saved in this tab</span><button data-action="exit-demo">Exit demo</button></div>':''}`}
+function mount(html){cleanupPool();main.innerHTML=html;renderHeader();cleanupPool=window.WonderPool.mount($('.pool'));}
+function loading(text='A moment of reflection.'){mount(page(`<div class="loading">${eye}<h2>${text}</h2><p class="muted">Bringing your space into focus.</p></div>`))}
+async function go(screen){state.screen=screen;const id=++epoch;window.scrollTo({top:0,behavior:'instant'});location.hash=screen;renderHeader();try{
+ if(screen==='welcome')return welcome();if(screen==='account')return account();
+ if(!state.mode)return welcome();
+ if(screen==='home')return home();if(screen==='assessment')return quiz();if(screen==='settings')return settings();
+ if(screen==='report'){loading('Your portrait, in perspective.');if(state.mode==='beta'){const d=await experience({action:'report'});if(id!==epoch)return;state.report=d.report;}else if(!state.report){const d=await experience({action:'demo_report',name:'Seer'});if(id!==epoch)return;state.report={...d.report,secondary:'Scholar'};}return report();}
+ if(screen==='introductions')return introductions(id);
+ if(screen==='journal'||screen==='reflection'){if(state.mode==='beta'){loading('Gathering your reflections.');const d=await experience({action:'entries'});if(id!==epoch)return;state.entries=d.entries;}return screen==='journal'?journal():reflection();}
+ if(screen==='ai'){if(state.mode==='beta'){loading('Returning to the mirror.');const d=await experience({action:'messages'});if(id!==epoch)return;state.messages=d.messages;state.conversationId=d.conversation_id;}return chat();}
+ }catch(e){if(id!==epoch)return;mount(page(`<div class="empty-state"><div class="empty-copy"><p class="eyebrow">Take your time</p><h2>${e.status===409?'First, meet yourself.':'A brief pause.'}</h2><p>${esc(e.message)}</p><div class="actions">${btn(e.status===409?'Begin the assessment':'Try again',e.status===409?'assessment':screen)}${btn('Your space','home','','secondary')}</div></div><div class="empty-art"></div></div>`));}}
+function welcome(){state.screen='welcome';mount(`<div class="welcome"><section class="welcome-copy"><p class="eyebrow">A considered beginning</p><h1>Meet yourself.<br><em>Then, another.</em></h1><p class="lede">A space to understand how you think, what you need, and the way you come close.</p><div class="actions">${btn('Explore the experience '+arrow,'demo')}${btn('Begin your portrait','create','','secondary')}</div><p class="small muted welcome-foot">Five elements. A fuller portrait.<br>An introduction is only the beginning.</p></section>${pool('Stillness.<br><em>Then, understanding.</em>',false)}</div>`)}
+async function startDemo(){loading();const saved=readDemo();Object.assign(state,{mode:'demo',name:saved.name||'Alex',user:null,profile:saved.profile||{},report:saved.report||null,entries:saved.entries||[],messages:saved.messages||[],assessment:saved.assessment||null,matchReaction:saved.matchReaction||null,draft:saved.draft||null,reflectionDraft:saved.reflectionDraft||null,chatDraft:saved.chatDraft||''});try{if(!state.report){const d=await experience({action:'demo_report',name:'Seer'});state.report={...d.report,secondary:'Scholar'};}saveDemo();go('home')}catch(e){error(e.message);welcome();toast(e.message)}}
+function home(){const r=state.report;mount(page(`${heading('Your space',`A little more <em>understood.</em>`,`Welcome${state.name?', '+esc(state.name):''}. Make room for what is becoming clear.`)}<div class="home-grid">${pool()}<aside class="prompt-card"><div><p class="eyebrow">A thought to stay with · 01</p><h3>Where do you feel<br>most like <em>yourself?</em></h3><p class="small muted">Consider the people, places, and moments that ask the least performance of you.</p></div><button class="text-btn" data-action="daily-journal">Follow the thought ${arrow}</button></aside></div><div class="section-head"><h3>Your unfolding story</h3><span class="eyebrow">Understanding before introduction</span></div><div class="journey-cards"><button class="journey-card" data-action="${r?'report':'assessment'}"><div class="card-top"><span class="eyebrow">01 / Your portrait</span>${arrow}</div><h3>${r?`The ${esc(r.name)}`:'Your elemental resonance'}</h3><p>${r?esc(r.essence):'Begin with Earth, Water, Fire, Air, and Ether. An honest starting point.'}</p></button><button class="journey-card" data-action="introductions"><div class="card-top"><span class="eyebrow">02 / An introduction</span>${arrow}</div><h3>Room for another.</h3><p>${state.mode==='demo'?'Meet a fictional introduction and explore the thinking behind it.':'Careful introductions, grounded in what matters to both people.'}</p></button><button class="journey-card" data-action="reflection"><div class="card-top"><span class="eyebrow">03 / After you meet</span>${arrow}</div><h3>What stayed with you?</h3><p>A date is new information. Make space to notice how it actually felt.</p></button></div>`))}
+function account(){
+ const mode=state.authMode,create=mode==='create',recover=mode==='recover',reset=mode==='reset';
+ const title=reset?'A fresh beginning.':recover?'Find your way back.':create?'Let us begin.':'Welcome back.';
+ const copy=reset?'Choose a new password for your private space.':recover?'We will send a secure reset link. Open it in the same browser where you make this request.':create?'Create an account, confirm your email, and begin your elemental portrait.':'Return to your portrait, reflections, and introductions.';
+ mount(`<div class="auth-layout"><aside class="nature-panel"><p class="eyebrow">WONDER / The beginning</p><h2>There is no greater intimacy than being <em>understood.</em></h2><p class="small">A portrait of the person beneath the profile.</p></aside><section class="auth-form"><p class="eyebrow">Your private space</p><h2>${title}</h2><p class="muted">${copy}</p><form id="account-form" class="form-grid" style="margin-top:28px">${!reset?'<label class="field full">Email<input name="email" type="email" autocomplete="email" required maxlength="320"></label>':''}${create?'<label class="field full">Phone number<input name="phone" type="tel" autocomplete="tel" required placeholder="(555) 555-5555"></label>':''}${!recover?`<label class="field full">${reset?'New password':'Password'}<input name="password" type="password" autocomplete="${create||reset?'new-password':'current-password'}" minlength="10" maxlength="128" required placeholder="At least 10 characters"></label>`:''}${reset?'<label class="field full">Confirm new password<input name="confirmPassword" type="password" autocomplete="new-password" minlength="10" maxlength="128" required></label>':''}${create?'<label class="check-label full"><input type="checkbox" name="adult" required><span>I am 18 or older. I understand WONDER’s portraits are interpretive and may change with my feedback.</span></label>':''}<div class="full">${statusEl()}<button class="btn" type="submit">${reset?'Save new password':recover?'Send reset link':create?'Create account':'Sign in'} ${arrow}</button></div></form><div class="actions">${!reset?`<button class="text-btn" data-action="${create||recover?'signin':'create'}">${create||recover?'Back to sign in':'New here? Create an account'}</button>`:''}${!create&&!reset&&!recover?'<button class="text-btn" data-action="recover">Forgot password?</button><button class="text-btn" data-action="create">Request another confirmation</button>':''}<button class="text-btn" data-action="demo">Explore the demo</button></div></section></div>`);
+}
+async function submitAccount(form){
+ if(state.busy)return;state.busy=true;const submit=form.querySelector('[type=submit]');submit.disabled=true;status('A moment…');
+ try{
+  const f=new FormData(form),mode=state.authMode;
+  if(mode==='reset'){
+   if(f.get('password')!==f.get('confirmPassword'))throw new Error('The two passwords do not match.');
+   await api('/api/signup',{action:'update_password',password:f.get('password')},false);
+   state.mode=null;state.user=null;state.authMode='signin';go('account');status('Your password has been updated. Sign in with your new password.');return;
   }
-
-  function go(screen) { state.screen = screen; save(); window.scrollTo(0, 0); render(); }
-  function root(html, label = 'Wonder') { setPhase(label); app.innerHTML = html; }
-  function button(label, attrs = '') { return `<button type="button" class="primary" ${attrs}>${esc(label)}</button>`; }
-  function ghost(label, attrs = '') { return `<button type="button" class="ghost" ${attrs}>${esc(label)}</button>`; }
-  function quiet(label, attrs = '') { return `<button type="button" class="quiet" ${attrs}>${esc(label)}</button>`; }
-
-  function render() {
-    if (state.screen === 'account') return renderAccount(state.accountMode || 'create');
-    if (state.screen === 'assessment') return renderAssessmentShell();
-    if (state.screen === 'mirror') return renderMirror();
-    if (state.screen === 'preferences') return renderPreferences();
-    if (state.screen === 'home') return renderHome();
-    if (state.screen === 'introductions') return renderIntroductions();
-    if (state.screen === 'reflection') return renderReflection();
-    return renderWelcome();
-  }
-
-  function renderWelcome() {
-    root(`<section class="narrow"><div class="eyebrow">Begin with being understood</div><h1>Dating should start with understanding you.</h1><p class="lede">Wonder begins with the person beneath the profile: how you think, what you value, how you relate, and what kind of connection can actually hold you.</p><div class="actions">${button('Get started', 'data-action="new"')}${ghost('I already have an account', 'data-action="signin"')}</div></section>`, 'Private preview');
-  }
-
-  function renderAccount(mode = 'create') {
-    state.screen = 'account'; state.accountMode = mode; save();
-    const signin = mode === 'signin';
-    const savedEmail = state.account?.email || '';
-    root(`<section class="narrow card"><div class="eyebrow">${signin ? 'Sign in to Wonder' : 'Create your Wonder account'}</div><h2>${signin ? 'Welcome back.' : 'First, create your account.'}</h2><p class="muted">${signin ? 'Sign in to continue your assessment, Mirror, or introductions.' : 'You will go directly into the Wonder assessment after this.'}</p><form id="accountForm" class="grid" novalidate><label class="full">Email address<input id="email" type="email" autocomplete="email" value="${esc(savedEmail)}" required /></label>${signin ? '' : '<label class="full">Phone number<input id="phone" type="tel" autocomplete="tel" placeholder="(555) 555-5555" required /></label>'}<label class="full">Password<input id="password" type="password" autocomplete="${signin ? 'current-password' : 'new-password'}" minlength="10" placeholder="At least 10 characters" required /></label><div class="full status" id="status" hidden></div><div class="full actions between">${ghost('Back', 'data-action="back"')}${button(signin ? 'Sign in' : 'Create account', 'data-action="submit-account" data-submit-account')}</div><div class="full">${quiet(signin ? 'New to Wonder? Create an account' : 'Already have an account? Sign in', 'data-action="toggle-account"')}</div></form></section>`, 'Account');
-  }
-
-  function showStatus(message, isError = false) { const el = document.getElementById('status'); if (!el) return; el.textContent = message || ''; el.hidden = !message; el.classList.toggle('error', !!isError); }
-
-  async function submitAccount() {
-    if (accountBusy) return;
-    const mode = state.accountMode || 'create';
-    const signin = mode === 'signin';
-    const email = document.getElementById('email')?.value.trim().toLowerCase();
-    const phone = document.getElementById('phone')?.value.trim() || '';
-    const password = document.getElementById('password')?.value || '';
-    if (!email || !/^\S+@\S+\.\S+$/.test(email)) return showStatus('Enter a valid email address.', true);
-    if (!signin && phone.replace(/\D/g, '').length < 10) return showStatus('Enter a valid phone number.', true);
-    if (password.length < 10) return showStatus('Use a password with at least 10 characters.', true);
-    accountBusy = true;
-    const submit = document.querySelector('[data-submit-account]'); if (submit) submit.disabled = true;
-    showStatus(signin ? 'Signing you in…' : 'Creating your account…');
-    try {
-      let action = signin ? 'signin' : 'create';
-      let data;
-      try { data = await post('/api/signup', { action, email, phone, password }); }
-      catch (err) {
-        if (!signin && err.data?.code === 'account_exists') { state.accountMode = 'signin'; save(); renderAccount('signin'); showStatus('That email already has an account. Enter the password to sign in.', true); return; }
-        throw err;
-      }
-      const user = data.user || {};
-      state.account = { id: user.id || null, email: user.email || email, phone: user.user_metadata?.phone || phone };
-      state.auth = { mode: 'httpOnly-cookie', savedAt: Date.now(), expiresAt: Date.now() + Number(data.expires_in || 3600) * 1000 };
-      save();
-      if (action === 'create') { clearAssessment(); state.mirror = null; state.preferences = null; save(); go('assessment'); return; }
-      await hydrateAfterSignin();
-    } catch (err) { showStatus(err.message || 'Unable to continue.', true); }
-    finally { accountBusy = false; const btn = document.querySelector('[data-submit-account]'); if (btn) btn.disabled = false; }
-  }
-
-  async function hydrateAfterSignin() {
-    showStatus('Restoring your progress…');
-    try {
-      const data = await post('/api/persist', { action: 'hydrate' });
-      if (data.assessment) { state.mirror = data.assessment; state.archetype = data.assessment.mirror?.primary?.name || data.assessment.archetypes?.[0]?.name || null; assessment.complete = true; assessment.result = data.assessment; assessment.sessionId = data.assessment.assessment_session_id || null; saveAssessment(); }
-      if (data.active_assessment?.session) { assessment.sessionId = data.active_assessment.session.id; assessment.responses = data.active_assessment.responses || {}; assessment.complete = false; assessment.result = null; assessment.pending = null; saveAssessment(); }
-      if (data.profile) state.preferences = { firstName: data.profile.first_name || '', currentCity: data.profile.current_city || '', gender: data.profile.gender || '', interested: data.profile.interested_in || '', intent: data.profile.relationship_intention || '', structure: data.profile.relationship_structure || '', children: data.profile.children || '', religion: data.profile.religion || '', ageRange: data.profile.age_range || '', distance: data.profile.max_distance || '', nonnegotiables: data.profile.nonnegotiables || '' };
-      if (data.birth) state.birth = { dob: data.birth.date_of_birth || '', tob: data.birth.time_of_birth || '', pob: data.birth.place_of_birth || '', toa: data.birth.time_accuracy || 'Unknown' };
-      save();
-      if (state.mirror && state.preferences?.firstName) return go('home');
-      if (state.mirror) return go('mirror');
-      return go('assessment');
-    } catch { return go('assessment'); }
-  }
-
-  function renderAssessmentShell() {
-    if (!hasAuth()) return renderAccount('signin');
-    root(`<section class="question"><div class="progress"><span id="progressBar"></span></div><div class="eyebrow" id="sectionLabel">Assessment</div><div id="questionMount"><div class="spinner"></div><p class="muted">Starting the Wonder assessment…</p></div><div class="actions between" id="questionActions" hidden>${ghost('Back', 'data-action="question-back"')}${button('Continue', 'data-action="question-next" disabled')}</div></section>`, 'Assessment');
-    startAssessmentOnce();
-  }
-
-  async function startAssessmentOnce() {
-    if (bootingAssessment) return;
-    bootingAssessment = true;
-    try {
-      if (!assessment.sessionId || assessment.complete) {
-        const start = await post('/api/assessment/start', { questionnaire_version: 'wonder-questionnaire-v2.2-elements' });
-        assessment.sessionId = start.session?.id || assessment.sessionId;
-        assessment.responses = start.responses || assessment.responses || {};
-        assessment.history = [];
-        assessment.pending = null;
-        assessment.complete = false;
-        assessment.result = null;
-        saveAssessment();
-      }
-      const next = await post('/api/assessment/next', { responses: assessment.responses || {} });
-      if (next.complete) return completeAssessment();
-      renderQuestion(next.item, next);
-    } catch (err) {
-      const mount = document.getElementById('questionMount');
-      if (mount) mount.innerHTML = `<div class="question-title">Wonder could not start the assessment.</div><p class="muted error">${esc(err.message || 'Please sign in again and retry.')}</p><div class="actions">${ghost('Return to sign in', 'data-action="signin"')}</div>`;
-    } finally { bootingAssessment = false; }
-  }
-
-  function getCurrentValue() {
-    const item = assessment.current;
-    if (item && assessment.pending?.itemId === item.id) return assessment.pending.value;
-    return selected;
-  }
-
-  function renderQuestion(item, meta = {}) {
-    if (!item) return;
-    assessment.current = item; assessment.meta = meta;
-    const pending = assessment.pending?.itemId === item.id ? assessment.pending.value : undefined;
-    selected = pending !== undefined ? pending : (assessment.responses?.[item.id] ?? null);
-    questionShownAt = Date.now(); saveAssessment();
-    const count = Number(meta.count || Object.keys(assessment.responses || {}).length || 0);
-    const target = Math.max(35, Number(meta.target_max || 36));
-    const progress = document.getElementById('progressBar'); if (progress) progress.style.width = `${Math.min(96, Math.max(4, (count / target) * 92))}%`;
-    const section = document.getElementById('sectionLabel'); if (section) section.textContent = meta.element ? `${meta.element} · ${meta.element_index || ''}` : 'Assessment';
-    const mount = document.getElementById('questionMount');
-    if (!mount) return;
-    mount.innerHTML = `<div class="question-title">${esc(item.prompt)}</div>${renderInput(item)}`;
-    const actions = document.getElementById('questionActions'); if (actions) actions.hidden = false;
-    updateContinue();
-  }
-
-  function renderInput(item) {
-    const options = item.options || [];
-    const current = getCurrentValue();
-    if (item.type === 'scale') return `<div class="scale options">${[1,2,3,4,5,6,7].map(v => `<button type="button" class="option ${Number(current) === v ? 'selected' : ''}" data-select="${v}">${v}</button>`).join('')}</div><p class="muted">${esc(item.anchors?.[0] || 'Not at all')} · ${esc(item.anchors?.[1] || 'Extremely')}</p>`;
-    if (item.type === 'multi') { const arr = Array.isArray(current) ? current : []; return `<p class="muted">Choose up to ${Number(item.max || 3)}.</p><div class="options">${options.map((o, i) => `<button type="button" class="option ${arr.includes(i) ? 'selected' : ''}" data-select="${i}">${esc(normalizeOption(o))}</button>`).join('')}</div>`; }
-    if (item.type === 'rank') { const arr = Array.isArray(current) ? current : []; const ranked = arr.length ? `<div class="rank-list">${arr.map((i, r) => `<span>${r + 1}. ${esc(normalizeOption(options[i]) || '')}</span>`).join('')}</div>` : '<p class="muted">Choose in priority order. Tap again to remove.</p>'; return `${ranked}<div class="options">${options.map((o, i) => `<button type="button" class="option ${arr.includes(i) ? 'selected' : ''}" data-select="${i}">${esc(normalizeOption(o))}</button>`).join('')}</div>`; }
-    return `<div class="options">${options.map((o, i) => `<button type="button" class="option ${Number(current) === i ? 'selected' : ''}" data-select="${i}">${esc(normalizeOption(o))}</button>`).join('')}</div>`;
-  }
-
-  function applyVisualSelection() {
-    const item = assessment.current; if (!item) return;
-    const current = getCurrentValue();
-    document.querySelectorAll('[data-select]').forEach(btn => {
-      const n = Number(btn.dataset.select);
-      const selectedNow = Array.isArray(current) ? current.includes(n) : Number(current) === n;
-      btn.classList.toggle('selected', selectedNow);
-    });
-    updateContinue();
-  }
-
-  function selectAnswer(value) {
-    const item = assessment.current; if (!item) return;
-    const n = Number(value);
-    let nextValue;
-    if (item.type === 'multi') { const max = Number(item.max || 3); let arr = Array.isArray(getCurrentValue()) ? [...getCurrentValue()] : []; nextValue = arr.includes(n) ? arr.filter(x => x !== n) : (arr.length < max ? [...arr, n] : arr); }
-    else if (item.type === 'rank') { const max = Math.min(Number(item.max || 5), (item.options || []).length || Number(item.max || 5)); let arr = Array.isArray(getCurrentValue()) ? [...getCurrentValue()] : []; nextValue = arr.includes(n) ? arr.filter(x => x !== n) : (arr.length < max ? [...arr, n] : arr); }
-    else nextValue = n;
-    selected = nextValue;
-    assessment.pending = { itemId: item.id, value: nextValue };
-    saveAssessment();
-    if (item.type === 'rank') renderQuestion(item, assessment.meta || {}); else applyVisualSelection();
-  }
-
-  function validSelection() {
-    const item = assessment.current; if (!item) return false;
-    const value = getCurrentValue();
-    if (item.type === 'multi') return Array.isArray(value) && value.length > 0;
-    if (item.type === 'rank') return Array.isArray(value) && value.length === Math.min(Number(item.max || 5), (item.options || []).length || Number(item.max || 5));
-    return value !== null && value !== undefined && value !== '';
-  }
-  function updateContinue() { const btn = document.querySelector('[data-action="question-next"]'); if (btn) btn.disabled = !validSelection() || savingAnswer; }
-
-  async function nextQuestion() {
-    if (savingAnswer || !validSelection() || !assessment.current) return;
-    const value = getCurrentValue();
-    savingAnswer = true;
-    const btn = document.querySelector('[data-action="question-next"]'); if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
-    try {
-      await post('/api/assessment/respond', { session_id: assessment.sessionId, item_id: assessment.current.id, response: value, response_time_ms: Math.max(0, Date.now() - questionShownAt), changed_count: 0 });
-      assessment.responses = assessment.responses || {};
-      assessment.responses[assessment.current.id] = value;
-      assessment.pending = null;
-      assessment.history = assessment.history || [];
-      assessment.history.push({ item: assessment.current, meta: assessment.meta });
-      selected = null;
-      saveAssessment();
-      const next = await post('/api/assessment/next', { responses: assessment.responses });
-      if (next.complete) return completeAssessment();
-      renderQuestion(next.item, next);
-    } catch (err) {
-      const mount = document.getElementById('questionMount');
-      if (mount) mount.insertAdjacentHTML('beforeend', `<p class="muted error">${esc(err.message || 'Wonder could not save that answer.')}</p>`);
-    } finally {
-      savingAnswer = false;
-      const nextBtn = document.querySelector('[data-action="question-next"]'); if (nextBtn) nextBtn.textContent = 'Continue';
-      updateContinue();
-    }
-  }
-
-  function backQuestion() {
-    const prev = (assessment.history || []).pop();
-    if (!prev) return go('account');
-    assessment.pending = null;
-    if (assessment.current?.id && assessment.responses) delete assessment.responses[assessment.current.id];
-    selected = null;
-    saveAssessment();
-    renderQuestion(prev.item, prev.meta || {});
-  }
-
-  async function completeAssessment() {
-    root(`<section class="narrow"><div class="spinner"></div><div class="eyebrow">Building your Mirror</div><h2>The pattern is coming together.</h2><p class="muted">Wonder is turning your assessment into a structured Mirror.</p></section>`, 'Mirror');
-    try { const result = await post('/api/assessment/complete', { session_id: assessment.sessionId }); assessment.complete = true; assessment.result = result; assessment.pending = null; saveAssessment(); state.mirror = result; state.archetype = result.mirror?.primary?.name || result.archetypes?.[0]?.name || null; save(); go('mirror'); }
-    catch (err) { root(`<section class="narrow"><div class="eyebrow">Assessment saved</div><h2>Wonder could not finish the Mirror yet.</h2><p class="muted error">${esc(err.message || 'Try again in a moment.')}</p><div class="actions">${button('Try again', 'data-action="finish-assessment"')}</div></section>`, 'Assessment'); }
-  }
-
-  function mirrorData() { const result = state.mirror || assessment.result || {}; return result.mirror || result || {}; }
-  function renderMirror() {
-    const m = mirrorData(); const primary = m.primary?.name || state.archetype || assessment.result?.archetypes?.[0]?.name || 'Unfolding';
-    root(`<section><div class="eyebrow">Your Mirror</div><h1>The ${esc(primary)}</h1><p class="lede">A working profile based on your responses. It is not a verdict; it is a starting point Wonder will refine through feedback and real choices.</p><div class="mirror-grid"><article><span>How you think</span><h3>${esc(m.move_title || m.headline || 'How you make sense of things')}</h3><p>${esc(m.move || 'Wonder is beginning to understand your cognitive pattern.')}</p></article><article><span>What matters</span><h3>${esc(m.drive_title || 'What carries weight')}</h3><p>${esc(m.drive || 'Wonder is identifying what appears to matter most.')}</p></article><article><span>How you relate</span><h3>${esc(m.relationship_title || 'How connection works for you')}</h3><p>${esc(m.relationship || 'Wonder is learning the shape of your relational needs.')}</p></article><article><span>Open question</span><h3>${esc(m.tension_title || 'Where the pattern may be conflicted')}</h3><p>${esc(m.tension || 'Wonder will keep this provisional until it has stronger evidence.')}</p></article></div><div class="card" style="margin-top:22px"><h3>How accurate is this?</h3><p class="muted">Your correction becomes part of the learning loop.</p><div class="rating">${[1,2,3,4,5,6,7].map(v => `<button type="button" class="rate ${state.mirrorRating === v ? 'selected' : ''}" data-rate="${v}">${v}</button>`).join('')}</div><textarea id="mirrorCorrection" placeholder="What feels accurate, incomplete, or wrong?">${esc(state.mirrorCorrection || '')}</textarea><div class="actions between">${ghost('Back to assessment', 'data-action="assessment"')}${button('Save and continue', 'data-action="save-mirror"')}</div><div class="status" id="status" hidden></div></div></section>`, 'Mirror');
-  }
-
-  async function saveMirrorFeedback() {
-    const correction = document.getElementById('mirrorCorrection')?.value.trim() || ''; state.mirrorCorrection = correction; save();
-    if (!state.mirrorRating) return showStatus('Choose an accuracy rating first.', true);
-    showStatus('Saving Mirror feedback…');
-    try { await post('/api/persist', { action: 'mirror_feedback', person_model_snapshot_id: assessment.result?.snapshot_id || state.mirror?.snapshot_id || null, assessment_session_id: assessment.sessionId || assessment.result?.assessment_session_id || null, overall_accuracy: state.mirrorRating, archetype_resonance: state.mirrorRating, correction }); } catch (_) {}
-    go('preferences');
-  }
-
-  function opts(values, selectedValue) { return values.map(v => `<option value="${esc(v)}" ${v === selectedValue ? 'selected' : ''}>${esc(v || 'Choose')}</option>`).join(''); }
-  function val(id) { return document.getElementById(id)?.value.trim() || ''; }
-
-  function renderPreferences() {
-    const p = state.preferences || {}; const b = state.birth || {};
-    root(`<section class="card"><div class="eyebrow">Dating preferences</div><h2>Now tell Wonder what should be practical.</h2><p class="muted">The assessment builds your Mirror first. These details help Wonder avoid introductions that are structurally wrong.</p><form id="prefForm" class="grid" novalidate><label>First name<input id="firstName" value="${esc(p.firstName || '')}" required /></label><label>Current city<input id="currentCity" value="${esc(p.currentCity || '')}" placeholder="Dallas, TX" required /></label><label>Date of birth<input id="dob" type="date" value="${esc(b.dob || '')}" required /></label><label>Time of birth<input id="tob" type="time" value="${esc(b.tob || '')}" /></label><label class="full">Place of birth<input id="pob" value="${esc(b.pob || '')}" placeholder="City, state or country" /></label><label>Gender<select id="gender" required>${opts(['','Woman','Man','Nonbinary','Self-describe'], p.gender)}</select></label><label>Interested in<select id="interested" required>${opts(['','Men','Women','Everyone'], p.interested)}</select></label><label>Relationship intention<select id="intent" required>${opts(['','Life partnership / marriage','Long-term relationship','Meaningful dating','Open to discovering'], p.intent)}</select></label><label>Relationship structure<select id="structure" required>${opts(['Monogamy','Non-monogamy','Open / unsure'], p.structure || 'Monogamy')}</select></label><label>Children<select id="children" required>${opts(['','Want children','Do not want children','Have children and want more','Have children and do not want more','Unsure'], p.children)}</select></label><label>Age range<input id="ageRange" value="${esc(p.ageRange || '')}" placeholder="e.g. 27–36" required /></label><label>Maximum distance<select id="distance">${opts(['25 miles','50 miles','100 miles','Same country','Anywhere'], p.distance || '25 miles')}</select></label><label class="full">Religion / spiritual tradition<input id="religion" value="${esc(p.religion || '')}" placeholder="Optional" /></label><label class="full">Absolute non-negotiables<textarea id="nonnegotiables" placeholder="Anything Wonder should never compromise on?">${esc(p.nonnegotiables || '')}</textarea></label><div class="full status" id="status" hidden></div><div class="full actions between">${ghost('Back to Mirror', 'data-action="mirror"')}${button('Save profile', 'data-action="save-preferences"')}</div></form></section>`, 'Preferences');
-  }
-
-  async function savePreferences() {
-    const p = { firstName: val('firstName'), currentCity: val('currentCity'), gender: val('gender'), interested: val('interested'), intent: val('intent'), structure: val('structure'), children: val('children'), religion: val('religion'), ageRange: val('ageRange'), distance: val('distance'), nonnegotiables: val('nonnegotiables') };
-    const b = { dob: val('dob'), tob: val('tob'), pob: val('pob'), toa: 'Unknown' };
-    for (const key of ['firstName','currentCity','gender','interested','intent','structure','children','ageRange']) if (!p[key]) return showStatus('Complete the required preference fields before continuing.', true);
-    if (!b.dob) return showStatus('Enter your date of birth before continuing.', true);
-    showStatus('Saving your profile…');
-    try { await post('/api/persist', { birth: b, essentials: p, answers: assessment.responses || {} }); state.preferences = p; state.birth = b; save(); go('home'); }
-    catch (err) { showStatus(err.message || 'Unable to save profile.', true); }
-  }
-
-  function renderHome() {
-    const p = state.preferences || {};
-    root(`<section><div class="eyebrow">Wonder</div><h1>Your profile is active.</h1><p class="lede">Wonder has your Mirror and the practical context it needs to begin making careful introductions.</p><div class="pill-row"><span class="pill">${esc(p.firstName || 'You')}</span><span class="pill">The ${esc(state.archetype || 'Unfolding')}</span><span class="pill">${esc(p.currentCity || 'Location pending')}</span></div><div class="home-grid"><button type="button" class="tile" data-action="introductions"><span>Introductions</span><strong>See who Wonder found</strong></button><button type="button" class="tile" data-action="preferences"><span>Profile</span><strong>Edit practical preferences</strong></button><button type="button" class="tile" data-action="mirror"><span>Mirror</span><strong>Review your profile</strong></button><button type="button" class="tile" data-action="logout"><span>Account</span><strong>Sign out</strong></button></div></section>`, 'Wonder');
-  }
-
-  async function renderIntroductions() {
-    if (!hasAuth()) return renderAccount('signin');
-    root(`<section class="narrow"><div class="spinner"></div><div class="eyebrow">Introductions</div><h2>Wonder is looking.</h2><p class="muted">Not for the highest score. For a relationship hypothesis with enough evidence to deserve attention.</p></section>`, 'Introductions');
-    try {
-      const data = await post('/api/matches/generate', {}); const matches = data.matches || [];
-      if (!matches.length) { root(`<section class="narrow"><div class="eyebrow">Introductions</div><h2>Not yet.</h2><p class="muted">Wonder does not currently have enough conviction to introduce someone. That is better than forcing a weak match.</p><div class="actions">${ghost('Back home', 'data-action="home"')}</div></section>`, 'Introductions'); return; }
-      const m = matches[0]; state.match = m; save();
-      root(`<section class="narrow"><div class="eyebrow">Your introduction</div><h1>We found someone.</h1><article class="match-card"><span>${esc(m.conviction || 'promising')} · ${Math.round(Number(m.score || 0))}/100</span><h3>${esc(m.first_name || 'Someone worth meeting')}</h3><p>${esc(m.current_city || 'Location private')}${m.distance_miles != null ? ` · ${Math.round(m.distance_miles)} miles` : ''}</p>${(m.rationale?.strengths || []).slice(0,3).map(x => `<p>${esc(x)}</p>`).join('') || '<p>Wonder sees enough compatibility to treat this as worth exploring.</p>'}${(m.rationale?.tensions || []).slice(0,1).map(x => `<p><strong>Worth watching:</strong> ${esc(x)}</p>`).join('')}</article><div class="actions between">${ghost('Not for me', 'data-action="decline-match"')}${button('Explore this person', 'data-action="explore-match"')}</div><div class="status" id="status" hidden></div></section>`, 'Introductions');
-    } catch (err) { const message = err.status === 409 ? 'Complete your Mirror before Wonder begins introductions.' : (err.message || 'Unable to load introductions.'); root(`<section class="narrow"><div class="eyebrow">Introductions</div><h2>Introductions are not ready.</h2><p class="muted error">${esc(message)}</p><div class="actions">${ghost('Back home', 'data-action="home"')}</div></section>`, 'Introductions'); }
-  }
-
-  async function reactToMatch(reaction) {
-    if (!state.match?.match_id) return showStatus('No active match to update.', true);
-    showStatus('Saving your choice…');
-    try { await post('/api/matches/generate', { action: 'reaction', match_id: state.match.match_id, reaction }); if (reaction === 'explore') return go('reflection'); state.match = null; save(); showStatus('Understood. Wonder will use this as a signal, not a judgment.'); setTimeout(() => go('home'), 900); }
-    catch (err) { showStatus(err.message || 'Unable to save that choice.', true); }
-  }
-
-  function renderReflection() {
-    const m = state.match || {};
-    root(`<section class="narrow card"><div class="eyebrow">Reflection</div><h2>What happened when the hypothesis met reality?</h2><p class="muted">This is how Wonder becomes more accurate over time.</p><div class="grid"><label>Felt understood<select id="felt_understood">${opts(['','1','2','3','4','5','6','7'], '')}</select></label><label>Conversational ease<select id="conversational_ease">${opts(['','1','2','3','4','5','6','7'], '')}</select></label><label>Attraction<select id="attraction">${opts(['','1','2','3','4','5','6','7'], '')}</select></label><label>Values fit<select id="values_fit">${opts(['','1','2','3','4','5','6','7'], '')}</select></label><label class="full">Notes<textarea id="outcomeNotes" placeholder="What felt promising, wrong, surprising, or worth testing again?"></textarea></label><div class="full status" id="status" hidden></div><div class="full actions between">${ghost('Skip for now', 'data-action="home"')}${button('Save reflection', 'data-action="save-reflection"')}</div></div></section>`, `Reflecting on ${m.first_name || 'introduction'}`);
-  }
-
-  async function saveReflection() {
-    const m = state.match || {}; if (!m.candidate_user_id) return go('home');
-    showStatus('Saving reflection…');
-    try { await post('/api/persist', { action: 'match_outcome', candidate_user_id: m.candidate_user_id, match_id: m.match_id || null, felt_understood: val('felt_understood') || null, conversational_ease: val('conversational_ease') || null, attraction: val('attraction') || null, values_fit: val('values_fit') || null, notes: val('outcomeNotes') }); go('home'); }
-    catch (err) { showStatus(err.message || 'Unable to save reflection.', true); }
-  }
-
-  async function logout() { try { await post('/api/signup', { action: 'logout' }); } catch (_) {} state.auth = null; save(); go('welcome'); }
-
-  function actionFromEvent(event) {
-    const selectEl = event.target.closest?.('[data-select]');
-    if (selectEl) return { kind: 'select', value: selectEl.dataset.select, el: selectEl };
-    const rateEl = event.target.closest?.('[data-rate]');
-    if (rateEl) return { kind: 'rate', value: rateEl.dataset.rate, el: rateEl };
-    const actionEl = event.target.closest?.('[data-action]');
-    if (actionEl) return { kind: 'action', value: actionEl.dataset.action, el: actionEl };
-    return null;
-  }
-
-  function runIntent(intent) {
-    if (!intent) return;
-    if (intent.kind === 'select') { selectAnswer(intent.value); return; }
-    if (intent.kind === 'rate') { state.mirrorRating = Number(intent.value); save(); renderMirror(); return; }
-    const action = intent.value;
-    if (action === 'new') return renderAccount('create');
-    if (action === 'signin') return renderAccount('signin');
-    if (action === 'submit-account') return submitAccount();
-    if (action === 'toggle-account') return renderAccount((state.accountMode || 'create') === 'signin' ? 'create' : 'signin');
-    if (action === 'back') return go('welcome');
-    if (action === 'question-next') return nextQuestion();
-    if (action === 'question-back') return backQuestion();
-    if (action === 'finish-assessment') return completeAssessment();
-    if (action === 'save-mirror') return saveMirrorFeedback();
-    if (action === 'save-preferences') return savePreferences();
-    if (action === 'introductions') return go('introductions');
-    if (action === 'explore-match') return reactToMatch('explore');
-    if (action === 'decline-match') return reactToMatch('decline');
-    if (action === 'save-reflection') return saveReflection();
-    if (action === 'logout') return logout();
-    if (['welcome','account','assessment','mirror','preferences','home','reflection'].includes(action)) return go(action);
-  }
-
-  function handleIntentEvent(event) {
-    const intent = actionFromEvent(event);
-    if (!intent) return;
-    const sig = `${intent.kind}:${intent.value}`;
-    if (event.type === 'click' && lastTouchSig === sig && Date.now() - lastTouchAt < 800) { event.preventDefault(); return; }
-    if (event.type === 'touchend') { lastTouchSig = sig; lastTouchAt = Date.now(); }
-    event.preventDefault();
-    runIntent(intent);
-  }
-
-  document.addEventListener('touchend', handleIntentEvent, { capture: true, passive: false });
-  document.addEventListener('click', handleIntentEvent, true);
-  document.addEventListener('submit', event => { event.preventDefault(); if (event.target.id === 'accountForm') submitAccount(); });
-  document.addEventListener('keydown', event => { if (event.key === 'Enter' && state.screen === 'account') { event.preventDefault(); submitAccount(); } });
-  window.addEventListener('error', event => { const el = document.getElementById('status'); if (el) { el.hidden = false; el.classList.add('error'); el.textContent = event.message || 'A browser error occurred.'; } });
-  render();
+  const d=await api('/api/signup',{action:mode==='recover'?'recover':mode==='create'?'create':'signin',email:f.get('email'),phone:f.get('phone'),password:f.get('password'),adult:f.get('adult')==='on'},false);
+  if(mode==='recover'||d.needs_email_confirmation){form.reset();status(d.message||'Check your inbox for your confirmation link. Open it in this browser.');return;}
+  Object.assign(state,{mode:'beta',user:d.user,report:null,assessment:null,entries:[],messages:[],draft:null,reflectionDraft:null,chatDraft:'',profile:{},birth:{},name:'',match:null,matchReaction:null,conversationId:null});
+  await hydrate();go(state.report?'home':'assessment');
+ }catch(e){error(e.message)}finally{state.busy=false;submit.disabled=false}
+}
+async function passwordResetScreen(){state.authMode='reset';await go('account');history.replaceState(null,'','#reset-password');}
+async function hydrate(){const d=await api('/api/persist',{action:'hydrate'});const p=d.profile||{};state.name=p.first_name||'';state.profile={firstName:p.first_name||'',currentCity:p.current_city||'',gender:p.gender||'',interested:p.interested_in||'',intent:p.relationship_intention||'',structure:p.relationship_structure||'Monogamy',children:p.children||'',ageRange:p.age_range||'',distance:p.max_distance||'25 miles',nonnegotiables:p.nonnegotiables||''};state.birth={dob:d.birth?.date_of_birth||''};if(d.assessment){const r=await experience({action:'report'});state.report=r.report;}if(d.active_assessment)state.assessment={sessionId:d.active_assessment.session.id,responses:d.active_assessment.responses||{},history:[]};}
+async function quiz(){loading('The elements of you.');try{if(!state.assessment||state.assessment.complete){state.assessment={responses:{},history:[],sessionId:null};if(state.mode==='beta'){const d=await api('/api/assessment/start',{});state.assessment.sessionId=d.session.id;state.assessment.responses=d.responses||{};}}const q=await api('/api/assessment/next',{responses:state.assessment.responses});if(state.screen!=='assessment')return;if(q.complete)return completeQuiz();state.assessment.current=q;renderQuestion()}catch(e){mount(page(`${heading('Your portrait','Let us try that again.')}<p>${esc(e.message)}</p><div class="actions">${btn('Resume assessment','assessment')}${btn('Your space','home','','secondary')}</div>`))}}
+function renderQuestion(){const a=state.assessment,q=a.current,item=q.item;selected=a.responses[item.id]??null;questionStarted=Date.now();const index=elements.indexOf(q.element),num=String(index+1).padStart(2,'0');mount(`<div class="quiz-layout"><aside class="quiz-nature" data-element="${esc(q.element)}"><div class="element-number">${num}</div><div class="element-caption"><p class="eyebrow">Elemental resonance</p><h2>${esc(q.element)}</h2><p>${esc(descriptions[q.element])}</p></div><p class="small quiz-side-note">Answer as you are.<br>There is no ideal person to become here.</p></aside><section class="quiz-content"><div class="elements-strip" aria-label="Assessment chapters">${elements.map(e=>`<span class="${e===q.element?'active':''}">${e}</span>`).join('')}</div><div class="progress" role="progressbar" aria-label="Assessment progress" aria-valuemin="0" aria-valuemax="45" aria-valuenow="${Math.min(45,q.count||0)}"><div style="width:${Math.min(97,(q.count||0)/45*100)}%"></div></div><p class="eyebrow">${q.precision?'A final refinement':`Within ${esc(q.element)}`} · ${Object.keys(a.responses).length} answered · about 8–12 minutes</p><h2 class="question-title">${esc(item.prompt)}</h2><div id="question-options"></div>${statusEl()}<div class="quiz-actions"><button class="text-btn" data-action="question-back">${arrowLeft}${a.history.length?'Previous question':'Your space'}</button><button class="btn" data-action="question-next" id="continue">Continue ${arrowRight}</button></div><p class="small muted" style="margin-top:22px">${state.mode==='demo'?'Demo progress is kept in this tab.':'Each answer is saved to your account.'}</p></section></div>`);questionOptions()}
+function questionOptions(){const i=state.assessment.current.item,arr=Array.isArray(selected)?selected:[];const options=i.type==='scale'?[1,2,3,4,5,6,7]:i.options.map((_,n)=>n);$('#question-options').innerHTML=`${i.type==='rank'?`<p class="small muted" style="margin-bottom:13px">Choose your ${i.max||5} priorities in order. Tap again to remove.</p>`:i.type==='multi'?`<p class="small muted">Choose up to ${i.max||3}.</p>`:''}<div class="options ${i.type==='scale'?'scale':''}">${options.map(n=>{const chosen=Array.isArray(selected)?arr.includes(n):selected===n;return `<button type="button" class="option" data-choice="${n}" aria-pressed="${chosen}"><span>${esc(i.type==='scale'?n:(i.options[n].label||i.options[n].text||i.options[n]))}</span>${i.type!=='scale'?`<span class="choice-mark" aria-hidden="true">${chosen?(i.type==='rank'?arr.indexOf(n)+1:check):''}</span>`:''}</button>`}).join('')}</div>${i.type==='scale'?`<div class="scale-labels"><span>${esc(i.anchors?.[0]||'Not at all')}</span><span>${esc(i.anchors?.[1]||'Very strongly')}</span></div>`:''}`;$('#continue').disabled=!answerValid()||state.quizBusy;}
+function answerValid(){const i=state.assessment.current.item;if(i.type==='rank')return Array.isArray(selected)&&selected.length===(i.max||5);if(i.type==='multi')return Array.isArray(selected)&&selected.length>0;return selected!==null&&selected!==undefined}
+function choose(n){if(state.quizBusy)return;const i=state.assessment.current.item;if(['rank','multi'].includes(i.type)){const arr=Array.isArray(selected)?[...selected]:[];const pos=arr.indexOf(n);if(pos>=0)arr.splice(pos,1);else if(arr.length<(i.max||3))arr.push(n);else return toast(`Choose no more than ${i.max||3}.`);selected=arr}else selected=n;questionOptions()}
+async function nextQuestion(){if(state.quizBusy||!answerValid())return;state.quizBusy=true;$('#continue').disabled=true;status('Saving your answer…');const a=state.assessment,q=a.current;try{if(state.mode==='beta')await api('/api/assessment/respond',{session_id:a.sessionId,item_id:q.item.id,response:selected,response_time_ms:Date.now()-questionStarted});a.responses[q.item.id]=selected;a.history.push(q);saveDemo();const next=await api('/api/assessment/next',{responses:a.responses});if(state.screen!=='assessment')return;if(next.complete)return await completeQuiz();a.current=next;renderQuestion();}catch(e){error(e.message)}finally{state.quizBusy=false;if($('#continue'))$('#continue').disabled=!answerValid()}}
+function previousQuestion(){if(state.quizBusy)return;const prev=state.assessment.history.pop();if(!prev)return go('home');state.assessment.current=prev;renderQuestion()}
+async function completeQuiz(){loading('Your pattern is coming into focus.');try{const a=state.assessment,d=state.mode==='demo'?await experience({action:'demo_complete',responses:a.responses}):await api('/api/assessment/complete',{session_id:a.sessionId});state.report=d.report;a.complete=true;saveDemo();go('report')}catch(e){mount(page(`${heading('Your answers are safe','A brief pause.')}<p>${esc(e.message)}</p><div class="actions">${btn('Build my portrait','complete-quiz')}${btn('Your space','home','','secondary')}</div>`))}}
+function report(){const r=state.report;if(!r)return go('assessment');mount(page(`<div class="report-lead"><div><p class="eyebrow">Your mirror report · A working portrait</p><h1>The <em>${esc(r.name)}.</em></h1><p class="serif-quote">${esc(r.essence)}</p><div class="chip-row">${r.elements.map(x=>`<span class="chip">${esc(x)}</span>`).join('')}${r.secondary?`<span class="chip">With ${esc(r.secondary)}</span>`:''}</div><p class="small muted">${r.evidence?'Based on your elemental assessment.':'An archetype portrait for exploration.'} You remain more than the pattern.</p></div><div class="report-art"><div class="eyebrow">WONDER / Portrait study</div><div class="report-symbol">${eye}</div><div class="eyebrow">${esc(r.gift)}</div></div></div><div class="report-tabs"><a href="#overview-section">The portrait</a><a href="#evidence-section">From your answers</a><a href="#practice-section">Your next reflection</a><a href="#feedback-section">What fits?</a></div><div class="report-main"><aside class="report-aside"><p class="eyebrow">Keep becoming.</p><p class="small muted">${esc(r.note)}</p>${state.mode==='demo'?`<label class="field">Explore 20 archetypes<select id="archetype-picker">${state.catalog.length?state.catalog.map(x=>`<option ${x.name===r.name?'selected':''}>${esc(x.name)}</option>`).join(''):`<option>${esc(r.name)}</option>`}</select></label>`:''}<button class="text-btn" data-action="print-report">Print / save as PDF</button><button class="text-btn" data-action="assessment">${state.assessment?.complete?'Retake the elements':'Explore the elements'}</button></aside><article class="report-body"><section id="overview-section"><p class="eyebrow">01 / The organizing pattern</p><h3>A way of moving through the world.</h3><p>${esc(r.opening)}</p>${r.blend_note?`<p class="pullquote">${esc(r.blend_note)}</p>`:''}</section><div class="chapter-grid">${r.chapters.map((c,i)=>`<section class="chapter"><span class="chapter-num">${String(i+2).padStart(2,'0')} /</span><h3>${esc(c.title)}</h3><p>${esc(c.body)}</p></section>`).join('')}</div><section id="evidence-section"><p class="eyebrow">From your answers</p><h3>${esc(r.evidence?.headline||'The person gives the pattern meaning.')}</h3>${r.evidence?`<p>${esc(r.evidence.mind)}</p><p>${esc(r.evidence.relationship)}</p>${elements.map(e=>`<div class="signal-row"><strong>${e}</strong><p>${esc(r.evidence.elements?.[e]?.summary||'Still unfolding.')}</p></div>`).join('')}${(r.evidence.patterns||[]).map(p=>`<h4 style="margin-top:25px">${esc(p.title)}</h4><p>${esc(p.body)}</p>`).join('')}<p class="small muted" style="margin-top:20px">Still to understand: ${esc((r.evidence.uncertain||[]).join(', '))}.</p>`:`<p>This is a general archetype report. Complete the elemental assessment to see your own answer-based observations, secondary pattern, and areas of uncertainty.</p>${btn('Begin the elements','assessment','style="margin-top:20px"','secondary')}`}<p class="small muted" style="margin-top:20px">${esc(r.interpretation||'Archetypes are reflection tools. They do not diagnose a condition or establish compatibility with another person.')}</p></section><section id="practice-section" class="reflection-prompt"><p class="eyebrow">A question worth keeping</p><h3>${esc(r.prompt)}</h3><button class="text-btn" data-action="report-journal">Take this to your journal ${arrow}</button></section><section id="feedback-section"><p class="eyebrow">Your interpretation matters</p><h3>What feels like you?</h3><p class="small muted">How well does this reflect you? 1 = barely; 7 = very closely.</p><div class="ratings">${[1,2,3,4,5,6,7].map(n=>`<button class="rate" data-accuracy="${n}" aria-pressed="false" aria-label="Accuracy ${n} out of 7">${n}</button>`).join('')}</div><label class="field">A correction, or something missing<textarea id="correction" maxlength="3000" placeholder="You can disagree with your portrait."></textarea></label>${statusEl()}<div class="actions">${btn('Save my feedback','save-feedback')}${btn('Explore introductions','introductions','','secondary')}</div></section></article></div>`));if(state.mode==='demo'&&!state.catalog.length)experience({action:'catalog'}).then(d=>{state.catalog=d.reports;const picker=$('#archetype-picker');if(picker)picker.innerHTML=d.reports.map(x=>`<option ${x.name===r.name?'selected':''}>${esc(x.name)}</option>`).join('')}).catch(e=>toast(e.message))}
+const demoMatch={first_name:'Rowan',current_city:'Dallas, Texas',age:29,archetype:'Architect',bio:'A thoughtful builder. A slow Sunday enthusiast. Most at home somewhere between a good conversation and an unfamiliar trail.',quote:'“I like people who can change my mind without needing to win.”',rationale:{strengths:['A shared appetite for depth: both portraits make room for curiosity beyond a polished first impression.','Different ways of finding clarity: one may notice a pattern while the other helps give it practical form.'],tensions:['Depth needs a shared pace. Ask how each of you prefers to move from an interesting conversation to a clear plan.']}};
+async function introductions(id){if(state.mode==='demo'){state.match=demoMatch;return matchView(true)}loading('Making room for the right introduction.');const d=await api('/api/matches/generate',{});if(id!==epoch)return;state.match=(d.matches||[])[0]||null;state.matchReaction=state.match?.status==='exploring'?'explore':state.match?.status==='declined'?'decline':null;if(!state.match)return mount(page(`${heading('Introductions','Room for <em>the right person.</em>')}<div class="empty-state"><div class="empty-copy"><p class="eyebrow">Nothing to force</p><h2>No introduction.<br><em>Yet.</em></h2><p>We do not currently have enough evidence to offer a thoughtful introduction. Your portrait can keep growing while we look.</p><div class="actions">${btn('Return to your mirror','ai')}${btn('Review preferences','settings','','secondary')}</div></div><div class="empty-art" role="img" aria-label="A still forest lake"></div></div>`));matchView(false)}
+function matchView(demo){const m=state.match;mount(page(`${heading('A considered introduction',`Someone worth <em>discovering.</em>`,demo?'A fictional introduction, created for this demonstration.':'A possibility to explore together. No score can promise chemistry.')}<div class="intro-layout"><div><div class="match-portrait"><div class="eyebrow">${demo?'Illustrative profile · Nature study':'Your introduction'}</div><div class="match-monogram" aria-hidden="true">${esc(m.first_name?.[0]||'W')}</div><div class="match-name"><div><h2>${esc(m.first_name||'Your introduction')}${m.age?`, ${esc(m.age)}`:''}</h2><p>${esc(m.current_city||'Location to be shared')}</p></div><span class="small">${demo?'The Architect':''}</span></div></div><p class="small muted" style="margin-top:14px">${demo?'Rowan is fictional. This nature image is not a profile photograph.':'Portrait photography will appear when shared by this member.'}</p></div><div class="match-story"><p class="eyebrow">A person, before a profile</p><h2>${demo?'Depth, with<br><em>somewhere to land.</em>':'An invitation to be curious.'}</h2><p class="lede">${esc(m.bio||'Start with the reasons for this introduction, then allow the conversation to bring something new.')}</p>${m.quote?`<p class="serif-quote" style="margin-top:25px;font-size:1.7rem">${esc(m.quote)}</p>`:''}<div class="match-reasons"><article><p class="eyebrow">Why WONDER noticed you</p><p>${esc(m.rationale?.strengths?.[0]||'Your answers suggest a possibility worth exploring.')}</p></article><article><p class="eyebrow">What may feel easy</p><p>${esc(m.rationale?.strengths?.[1]||'Bring curiosity to what feels natural between you.')}</p></article><article><p class="eyebrow">What deserves attention</p><p>${esc(m.rationale?.tensions?.[0]||'Notice how comfortably both people can express a different need.')}</p></article></div>${state.matchReaction==='explore'?`<div class="notice">${demo?'Demo interest saved. In the beta, an introduction still requires mutual interest.':'Your interest is recorded. The other person makes their own choice.'}</div><div class="actions">${btn('After the date: reflect','reflection')}${btn('Return to your space','home','','secondary')}</div>`:state.matchReaction==='decline'?`<div class="notice">Your choice is saved. You do not need to manufacture a connection.</div>${btn('Your space','home')}`:`<div class="actions">${btn('I am curious '+arrow,'match-explore')}${btn('Not for me','match-decline','','secondary')}</div>`}${statusEl()}<p class="small muted" style="margin-top:20px">${demo?'The rationale illustrates the experience; it is not a compatibility prediction.':'Your journal, private reflections, and conversations with Mirror are not displayed to this person.'}</p></div></div>`))}
+async function reaction(value){if(state.busy)return;state.busy=true;status('Saving your choice…');try{if(state.mode==='beta')await api('/api/matches/generate',{action:'reaction',match_id:state.match.match_id,reaction:value});state.matchReaction=value;saveDemo();matchView(state.mode==='demo')}catch(e){error(e.message)}finally{state.busy=false}}
+const newDraft=()=>({id:null,title:'',text:'',mood:'',dirty:false});
+function journal(){state.draft=state.draft||newDraft();const d=state.draft,entries=state.entries.filter(x=>x.entry?.kind==='journal');mount(page(`${heading('Your journal','Thoughts, <em>given room.</em>','Some things become clearer when you give them a little space on the page.')}<div class="journal-layout"><aside class="journal-sidebar">${btn('A new reflection +','new-entry','','secondary')}<div class="journal-list">${entries.length?entries.map(x=>`<button class="entry-link ${x.id===d.id?'active':''}" data-entry="${esc(x.id)}"><span class="eyebrow">${formatDate(x.created_at)}</span><strong>${esc(x.entry.title)}</strong><span class="small muted">${esc(x.entry.mood||'A private reflection')}</span></button>`).join(''):'<p class="small muted">Your first reflection starts here. There is no right length.</p>'}</div></aside><section class="journal-editor"><form id="journal-form"><label class="sr-only" for="entry-title">Reflection title</label><input class="title-input" id="entry-title" maxlength="160" required placeholder="A thought worth keeping…" value="${esc(d.title)}"><div class="moods" aria-label="How you are arriving">${['Reflective','Hopeful','Uncertain','Grounded','Tender'].map(m=>`<button type="button" data-mood="${m}" aria-pressed="${d.mood===m}">${m}</button>`).join('')}</div><label class="sr-only" for="entry-text">Your reflection</label><textarea id="entry-text" maxlength="12000" required placeholder="Start wherever you are. What happened? What did you notice? What are you still trying to understand?">${esc(d.text)}</textarea><div class="journal-bottom"><span class="small muted" id="save-label">${d.dirty?'Unsaved changes':d.id?'Saved reflection':state.mode==='demo'?'Stored only in this demo tab':'Private to your account'}</span><div class="actions" style="margin:0">${d.id?'<button class="text-btn" type="button" data-action="delete-entry">Delete</button>':''}<button class="btn" type="submit">Save reflection ${arrow}</button></div></div>${statusEl()}</form></section></div>`))}
+function formatDate(s){return new Date(s||Date.now()).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}
+async function saveEntry(form){if(state.busy)return;state.busy=true;const d=state.draft;d.title=$('#entry-title').value.trim();d.text=$('#entry-text').value.trim();if(!d.title||!d.text){state.busy=false;return error('Add a title and a reflection before saving.')}form.querySelector('[type=submit]').disabled=true;status('Saving…');try{let row;if(state.mode==='demo'){row={id:d.id||crypto.randomUUID(),created_at:state.entries.find(x=>x.id===d.id)?.created_at||new Date().toISOString(),entry:{kind:'journal',title:d.title,text:d.text,mood:d.mood}}}else row=(await experience({action:'save_entry',...d,kind:'journal'})).entry;state.entries=[row,...state.entries.filter(x=>x.id!==row.id)];state.draft={...row.entry,id:row.id,dirty:false};saveDemo();journal();toast('Reflection saved.')}catch(e){error(e.message)}finally{state.busy=false;const b=$('#journal-form [type=submit]');if(b)b.disabled=false}}
+async function confirm(title,body){const dialog=$('#confirm');$('#confirm-title').textContent=title;$('#confirm-body').textContent=body;dialog.showModal();return new Promise(resolve=>dialog.addEventListener('close',()=>resolve(dialog.returnValue==='ok'),{once:true}))}
+async function selectEntry(id){if(state.draft?.dirty&&!await confirm('Leave this draft?','Your unsaved changes will be discarded.'))return;const row=state.entries.find(x=>x.id===id);state.draft=row?{...row.entry,id:row.id,dirty:false}:newDraft();saveDemo();journal()}
+async function deleteEntry(){const id=state.draft?.id;if(!id||!await confirm('Delete this reflection?','This removes the saved entry from your journal.'))return;try{if(state.mode==='beta')await experience({action:'delete_entry',id});state.entries=state.entries.filter(x=>x.id!==id);state.draft=newDraft();saveDemo();journal();toast('Reflection deleted.')}catch(e){error(e.message)}}
+const metricLabels={understood:'I felt understood.',ease:'Conversation felt natural.',attraction:'I felt attraction.',safety:'I felt comfortable and respected.',curiosity:'I want to know more about them.'};
+function reflection(){const d=state.reflectionDraft||{person:state.match?.first_name||'',date:new Date().toISOString().slice(0,10),text:'',ratings:{},continue:null};state.reflectionDraft=d;const previous=state.entries.filter(x=>x.entry?.kind==='reflection');mount(page(`${heading('After the introduction','Notice what <em>stayed.</em>')}<div class="reflection-layout"><aside><p class="eyebrow">A private post-date reflection</p><h2>How did you feel<br><em>in their company?</em></h2><p class="muted">Let the experience be more interesting than the expectation. There is no obligation to feel what you hoped to feel.</p><div class="notice">Your reflection belongs to you. It is not sent to your date.</div>${previous.length?`<p class="eyebrow">Earlier reflections</p>${previous.slice(0,5).map(x=>`<details style="margin-top:15px"><summary>${esc(x.entry.person||'An introduction')} · ${formatDate(x.created_at)}</summary><p class="small muted">${esc(x.entry.text)}</p></details>`).join('')}`:''}</aside><form class="reflection-form" id="reflection-form"><div class="form-grid" style="padding:24px 0"><label class="field">Who did you meet?<input id="reflection-person" value="${esc(d.person)}" maxlength="100" required placeholder="First name"></label><label class="field">When?<input id="reflection-date" type="date" max="${new Date().toISOString().slice(0,10)}" required value="${esc(d.date)}"></label></div>${Object.entries(metricLabels).map(([k,l])=>`<div class="rating-field"><p id="metric-${k}">${l}</p><div class="ratings" role="group" aria-labelledby="metric-${k}">${[1,2,3,4,5,6,7].map(n=>`<button class="rate" type="button" data-metric="${k}" data-value="${n}" aria-label="${l} ${n} out of 7" aria-pressed="${d.ratings[k]===n}">${n}</button>`).join('')}</div><div class="scale-labels"><span>Not at all</span><span>Very much</span></div></div>`).join('')}<div class="rating-field"><p>Would you like to see them again?</p><div class="moods">${[['true','Yes'],['false','No'],['null','Still considering']].map(([v,l])=>`<button type="button" data-continue="${v}" aria-pressed="${String(d.continue)===v}">${l}</button>`).join('')}</div></div><label class="field" style="margin-top:25px">What surprised you?<textarea id="reflection-text" required maxlength="12000" placeholder="A moment of ease, something that felt off, a question you would like to ask…">${esc(d.text)}</textarea></label>${statusEl()}<div class="actions"><button class="btn" type="submit">Save my reflection ${arrow}</button></div><p class="small muted" style="margin-top:15px">Your observations can inform future understanding. They do not establish a verdict on another person.</p></form></div>`))}
+async function saveReflection(form){if(state.busy)return;const d=state.reflectionDraft;d.person=$('#reflection-person').value.trim();d.date=$('#reflection-date').value;d.text=$('#reflection-text').value.trim();if(Object.keys(d.ratings).length!==5)return error('Choose a response for each of the five statements.');state.busy=true;form.querySelector('[type=submit]').disabled=true;try{let row;const entry={...d,title:`After meeting ${d.person}`,kind:'reflection'};if(state.mode==='demo')row={id:crypto.randomUUID(),created_at:new Date().toISOString(),entry};else {row=(await experience({action:'save_entry',...entry})).entry;if(state.match?.candidate_user_id&&d.person===state.match.first_name){await api('/api/persist',{action:'match_outcome',candidate_user_id:state.match.candidate_user_id,match_id:state.match.match_id,met_in_person:true,wanted_second_date:d.continue,felt_understood:d.ratings.understood,conversational_ease:d.ratings.ease,attraction:d.ratings.attraction,emotional_safety:d.ratings.safety,notes:d.text}).catch(()=>toast('Your reflection is saved; matching feedback will need another attempt.'));}}state.entries=[row,...state.entries];state.reflectionDraft=null;saveDemo();reflection();toast('Your reflection is saved.')}catch(e){error(e.message)}finally{state.busy=false;const b=$('#reflection-form [type=submit]');if(b)b.disabled=false}}
+function chat(){mount(page(`${heading('The interactive mirror','A conversation <em>with perspective.</em>')}<div class="mirror-layout">${pool('Look a little<br><em>closer.</em>',false)}<section class="chat"><div class="chat-header"><div><p class="eyebrow">WONDER Mirror</p><h3>${state.mode==='demo'?'A guided reflection':'Room to think aloud'}</h3></div><span class="chip">${state.mode==='demo'?'Guided demo':'AI reflection'}</span></div><div class="chat-messages" id="messages" role="log" aria-label="Mirror conversation" aria-live="polite">${messageHtml('assistant',state.mode==='demo'?'Welcome to the mirror. This guided demonstration uses written prompts, not live AI. What would you like to understand about yourself?':'What has been on your mind? We can look at a moment, a relationship, or something in your portrait that does not quite fit.')}${state.messages.map(m=>messageHtml(m.role,m.body)).join('')}</div><div class="chat-compose"><div class="chat-prompts">${['Help me understand a pattern','Reflect on a recent date','Explore my portrait'].map(p=>`<button data-prompt="${p}">${p}</button>`).join('')}</div><form id="chat-form"><label for="chat-input" class="sr-only">Message to your mirror</label><textarea id="chat-input" maxlength="6000" required placeholder="What is on your mind?">${esc(state.chatDraft)}</textarea><button class="chat-send" type="submit" aria-label="Send message">${arrowUp}</button></form>${statusEl()}<p class="chat-note">${state.mode==='demo'?'Illustrative responses. Live AI is available to signed-in members when the AI service is connected.':'Your message and portrait context are sent to the AI provider when you press send. Journal entries are not included.'} Interpretations can be wrong; you can question them.</p></div></section></div>`));scrollMessages()}
+function messageHtml(role,body){return `<div class="message ${role==='user'?'user':'assistant'}"><p class="eyebrow">${role==='user'?'You':'WONDER Mirror'}</p><p>${esc(body)}</p></div>`}
+function scrollMessages(){const el=$('#messages');if(el)el.scrollTop=el.scrollHeight}
+function demoReply(text){const t=text.toLowerCase();if(/date|rowan|meet|attract/.test(t))return 'A useful place to begin is the difference between how you expected to feel and how you actually felt. Think of one specific moment, without explaining it yet. Did you feel more able to be yourself, or more occupied with how you were coming across?';if(/portrait|archetype|seer|pattern/.test(t))return `Your ${state.report?.name||'Seer'} portrait offers a possibility to examine, not a conclusion to obey. Think of a recent situation where its description fitted—and one where it did not. Which difference in context might explain the change?`;if(/space|distance|alone|withdraw/.test(t))return 'Wanting space can mean several things: rest, room to think, or difficulty naming a need. The circumstances matter. What happened just before you wanted distance?';return 'Let us separate the event from the meaning you gave it. What did you directly observe, and which part are you still inferring? That distinction can make room for a more useful next question.'}
+async function sendChat(form){if(state.busy)return;const input=$('#chat-input'),text=input.value.trim();if(!text)return;state.busy=true;form.querySelector('button').disabled=true;state.chatDraft=text;status('Reflecting…');try{let reply;if(state.mode==='demo')reply=demoReply(text);else{const d=await api('/api/chat',{message:text,conversation_id:state.conversationId});reply=d.reply;state.conversationId=d.conversation_id||state.conversationId;}state.messages.push({role:'user',body:text},{role:'assistant',body:reply});state.chatDraft='';saveDemo();chat()}catch(e){error(e.message)}finally{state.busy=false;const b=$('#chat-form button');if(b)b.disabled=false}}
+function options(values,value){return ['Choose…',...values].map((s,i)=>`<option value="${i?esc(s):''}" ${s===value?'selected':''}>${esc(s)}</option>`).join('')}
+function settings(){const p=state.profile,b=state.birth;mount(page(`<div class="settings">${heading('Your practical world','A life that <em>fits.</em>')}<p class="lede" style="margin-bottom:30px">Your portrait explores how you relate. These preferences help establish whether an introduction makes practical sense.</p><form id="settings-form" class="form-grid"><label class="field">First name<input name="firstName" value="${esc(p.firstName||state.name)}" required maxlength="100"></label><label class="field">Current city<input name="currentCity" value="${esc(p.currentCity)}" placeholder="Dallas, Texas" required maxlength="200"></label><label class="field">Date of birth<input name="dob" type="date" value="${esc(b.dob)}" required></label><label class="field">Gender<select name="gender" required>${options(['Woman','Man','Nonbinary','Self-describe'],p.gender)}</select></label><label class="field">Interested in<select name="interested" required>${options(['Men','Women','Everyone'],p.interested)}</select></label><label class="field">Relationship intention<select name="intent" required>${options(['Life partnership / marriage','Long-term relationship','Meaningful dating','Open to discovering'],p.intent)}</select></label><label class="field">Relationship structure<select name="structure" required>${options(['Monogamy','Non-monogamy','Open / unsure'],p.structure)}</select></label><label class="field">Children<select name="children" required>${options(['Want children','Do not want children','Have children and want more','Have children and do not want more','Unsure'],p.children)}</select></label><label class="field">Preferred ages<input name="ageRange" required value="${esc(p.ageRange)}" placeholder="27–36" pattern="[0-9]{2}\\s*[-–]\\s*[0-9]{2}"></label><label class="field">Distance<select name="distance" required>${options(['25 miles','50 miles','100 miles','Same country','Anywhere'],p.distance)}</select></label><label class="field full">What should never be compromised?<textarea name="nonnegotiables" maxlength="1500" placeholder="Anything else an introduction needs to respect.">${esc(p.nonnegotiables)}</textarea></label><div class="full">${statusEl()}<button class="btn" type="submit">Save preferences ${arrow}</button></div></form><div class="section-head"><div><p class="eyebrow">Your account</p><p class="small muted">${state.mode==='demo'?'You are exploring a fictional demo.':esc(state.user?.email||'Signed in')}</p></div>${btn(state.mode==='demo'?'Exit demo':'Sign out','logout','','secondary')}</div>${state.mode==='demo'?'<button class="text-btn" data-action="reset-demo">Reset this demo</button>':''}</div>`))}
+async function saveSettings(form){if(state.busy)return;const f=Object.fromEntries(new FormData(form)),birth={dob:f.dob};const age=new Date();age.setFullYear(age.getFullYear()-18);if(new Date(f.dob)>age)return error('WONDER is for adults aged 18 and older.');const ages=f.ageRange.match(/(\d+)\s*[-–]\s*(\d+)/);if(!ages||+ages[1]<18||+ages[2]<+ages[1]||+ages[2]>120)return error('Enter an adult age range, such as 27–36.');delete f.dob;state.busy=true;form.querySelector('[type=submit]').disabled=true;try{if(state.mode==='beta')await api('/api/persist',{essentials:f,birth});state.profile=f;state.birth=birth;state.name=f.firstName;saveDemo();go('home');toast('Preferences saved.')}catch(e){error(e.message)}finally{state.busy=false;const b=$('#settings-form [type=submit]');if(b)b.disabled=false}}
+async function saveFeedback(){const n=Number($('.rate[data-accuracy][aria-pressed=true]')?.dataset.accuracy);if(!n)return error('Choose an accuracy rating first.');if(state.busy)return;state.busy=true;try{if(state.mode==='beta')await api('/api/persist',{action:'mirror_feedback',overall_accuracy:n,archetype_resonance:n,correction:$('#correction').value});else{const saved=readDemo();saved.feedback={accuracy:n,correction:$('#correction').value};sessionStorage.setItem(demoKey,JSON.stringify(saved));}status('Your feedback is saved. Thank you for helping make the portrait more accurate.')}catch(e){error(e.message)}finally{state.busy=false}}
+async function logout(){if(state.mode==='beta'){try{await api('/api/signup',{action:'logout'},false)}catch(e){toast(e.message);return}}saveDemo();Object.assign(state,{mode:null,user:null,name:'',report:null,assessment:null,entries:[],messages:[],draft:null,reflectionDraft:null,profile:{},birth:{},chatDraft:'',match:null,matchReaction:null});go('welcome')}
+async function action(a){if(['home','report','introductions','journal','reflection','ai','settings','welcome'].includes(a))return go(a);if(a==='demo')return startDemo();if(['signin','create','recover'].includes(a)){state.authMode=a;return go('account')}if(a==='assessment'){if(state.assessment?.complete&&!await confirm('Begin a new portrait?','Your previous report stays available while you complete a new assessment.'))return;return go('assessment')}if(a==='question-next')return nextQuestion();if(a==='question-back')return previousQuestion();if(a==='complete-quiz')return completeQuiz();if(a==='save-feedback')return saveFeedback();if(a==='print-report')return window.print();if(a==='match-explore')return reaction('explore');if(a==='match-decline')return reaction('decline');if(a==='new-entry')return selectEntry(null);if(a==='delete-entry')return deleteEntry();if(a==='daily-journal'||a==='report-journal'){if(state.draft?.dirty&&!await confirm('Start another reflection?','Your unsaved draft will be replaced.'))return;state.draft={...newDraft(),title:a==='daily-journal'?'Where I feel most like myself':state.report.prompt,dirty:true};saveDemo();return go('journal')}if(a==='logout'||a==='exit-demo')return logout();if(a==='reset-demo'&&await confirm('Reset the demonstration?','This clears only the fictional demo and its reflections in this tab.')){sessionStorage.removeItem(demoKey);return startDemo()}}
+document.addEventListener('click',e=>{const b=e.target.closest('button');if(!b||b.disabled)return;if(b.dataset.action){e.preventDefault();action(b.dataset.action).catch(err=>error(err.message));return}if(b.dataset.choice!==undefined)return choose(Number(b.dataset.choice));if(b.dataset.accuracy){document.querySelectorAll('[data-accuracy]').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));return}if(b.dataset.mood){state.draft.mood=b.dataset.mood;state.draft.dirty=true;document.querySelectorAll('[data-mood]').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));saveDemo();return}if(b.dataset.entry)return selectEntry(b.dataset.entry);if(b.dataset.metric){state.reflectionDraft.ratings[b.dataset.metric]=Number(b.dataset.value);document.querySelectorAll(`[data-metric="${b.dataset.metric}"]`).forEach(x=>x.setAttribute('aria-pressed',String(x===b)));saveDemo();return}if(b.dataset.continue){state.reflectionDraft.continue=b.dataset.continue==='null'?null:b.dataset.continue==='true';document.querySelectorAll('[data-continue]').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));saveDemo();return}if(b.dataset.prompt){$('#chat-input').value=b.dataset.prompt;state.chatDraft=b.dataset.prompt;$('#chat-input').focus();return}});
+document.addEventListener('submit',e=>{const actions={'account-form':submitAccount,'journal-form':saveEntry,'reflection-form':saveReflection,'chat-form':sendChat,'settings-form':saveSettings};if(actions[e.target.id]){e.preventDefault();actions[e.target.id](e.target).catch(err=>error(err.message))}});
+document.addEventListener('input',e=>{if(['entry-title','entry-text'].includes(e.target.id)){state.draft[e.target.id==='entry-title'?'title':'text']=e.target.value;state.draft.dirty=true;$('#save-label').textContent='Unsaved changes';saveDemo()}if(e.target.id.startsWith('reflection-')){const k=e.target.id.replace('reflection-','');if(['text','person','date'].includes(k)&&state.reflectionDraft){state.reflectionDraft[k]=e.target.value;saveDemo()}}if(e.target.id==='chat-input'){state.chatDraft=e.target.value;saveDemo()}});
+document.addEventListener('change',e=>{if(e.target.id==='archetype-picker'){const reportData=state.catalog.find(x=>x.name===e.target.value);if(reportData){state.report=reportData;saveDemo();report()}}});
+window.addEventListener('beforeunload',e=>{if(state.mode==='beta'&&(state.draft?.dirty||state.reflectionDraft?.text?.trim()||state.chatDraft?.trim())){e.preventDefault();e.returnValue=''}});
+window.addEventListener('hashchange',()=>{const s=location.hash.slice(1);if(['home','report','introductions','journal','reflection','ai','settings','assessment','welcome','account'].includes(s)&&s!==state.screen)go(s)});
+async function init(){
+ const route=location.hash.slice(1),params=new URLSearchParams(location.search),code=params.get('code');
+ if(code||params.has('error')||location.hash.includes('error_description=')){
+  history.replaceState(null,'',location.pathname);state.authMode='signin';account();
+  if(!code){error('This account link could not be verified. Request a new confirmation or password-reset link.');return;}
+  status('Confirming your secure link…');
+  try{const d=await api('/api/signup',{action:'exchange',code},false);if(d.recovery)return passwordResetScreen();state.mode='beta';state.user=d.user;await hydrate();go(state.report?'home':'assessment');}
+  catch(e){state.mode=null;state.authMode='signin';account();error(e.message);}return;
+ }
+ if(route==='reset-password'){
+  try{await api('/api/signup',{action:'recovery_status'},false);return passwordResetScreen();}
+  catch{state.authMode='recover';await go('account');error('Request a fresh reset link to choose a new password.');return;}
+ }
+ if(params.get('demo')==='1')return startDemo();
+ welcome();try{const session=await api('/api/signup',{action:'refresh'},false);state.mode='beta';state.user=session.user;await hydrate();go(['home','report','journal','ai','introductions','reflection','settings'].includes(route)?route:'home')}
+ catch{if(state.mode==='beta'){state.mode=null;welcome();toast('Your saved space could not be loaded. Please sign in again.')}}
+}
+init();
 })();

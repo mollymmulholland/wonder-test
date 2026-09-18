@@ -1,7 +1,7 @@
-const { SUPABASE_URL, ANON, accessToken: tokenFromRequest, authUser } = require('../lib/supabase-server');
-const { secureApi, cleanText } = require('../lib/api-security');
-const { buildMirror } = require('../lib/mirror-engine');
-const { buildRelationalSelf } = require('../lib/relational-self');
+const { SUPABASE_URL, ANON, accessToken: tokenFromRequest, authUser } = require('../../lib/supabase-server');
+const { secureApi, cleanText } = require('../../lib/api-security');
+const { buildMirror } = require('../../lib/mirror-engine');
+const { buildRelationalSelf } = require('../../lib/relational-self');
 
 async function request(path, { method = 'GET', body, accessToken, prefer } = {}) {
   const r = await fetch(`${SUPABASE_URL}/rest/v1${path}`, {

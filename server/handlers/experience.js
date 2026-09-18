@@ -1,10 +1,10 @@
-const {secureApi,cleanText}=require('../lib/api-security');
-const {authRequest,rest}=require('../lib/supabase-server');
-const {catalog,reportFor,personalizedReport}=require('../lib/archetype-reports');
-const {scoreResponses}=require('../lib/archetype-precision');
-const {inferArchetypes}=require('../lib/archetype-system-v2');
-const {buildMirror}=require('../lib/mirror-engine');
-const {validateAnswers}=require('../lib/assessment-validation');
+const {secureApi,cleanText}=require('../../lib/api-security');
+const {authRequest,rest}=require('../../lib/supabase-server');
+const {catalog,reportFor,personalizedReport}=require('../../lib/archetype-reports');
+const {scoreResponses}=require('../../lib/archetype-precision');
+const {inferArchetypes}=require('../../lib/archetype-system-v2');
+const {buildMirror}=require('../../lib/mirror-engine');
+const {validateAnswers}=require('../../lib/assessment-validation');
 const uuid=x=>/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(x||'');
 const unpack=row=>{try{return {...row,entry:JSON.parse(row.body)}}catch{return {...row,entry:{kind:'journal',title:'Reflection',text:row.body}}}};
 module.exports=async(req,res)=>{

@@ -1,5 +1,5 @@
-const {secureApi,cleanText}=require('../lib/api-security');
-const {authRequest,rest}=require('../lib/supabase-server');
+const {secureApi,cleanText}=require('../../lib/api-security');
+const {authRequest,rest}=require('../../lib/supabase-server');
 const buckets=new Map();
 function allow(id){const now=Date.now(),previous=buckets.get(id),b=previous&&now-previous.start<600000?previous:{start:now,count:0};b.count++;buckets.set(id,b);if(buckets.size>2000)for(const[k,v]of buckets)if(now-v.start>=600000)buckets.delete(k);return b.count<=20;}
 module.exports=async(req,res)=>{

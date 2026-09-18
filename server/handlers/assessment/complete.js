@@ -1,15 +1,15 @@
-const {validateAnswers}=require('../../lib/assessment-validation');
-const {personalizedReport}=require('../../lib/archetype-reports');
-const {authRequest,rest}=require('../../lib/supabase-server');
-const {secureApi}=require('../../lib/api-security');
-const {scoreResponses}=require('../../lib/archetype-precision');
-const {inferArchetypes,deriveFoundations,VERSION:archetype_version}=require('../../lib/archetype-system-v2');
-const {inferPsychologicalArchitecture,VERSION:architecture_version}=require('../../lib/psychological-architecture');
-const {inferArchetypeRoles,VERSION:role_version}=require('../../lib/archetype-roles');
-const {buildArchitectureMirror,VERSION:mirror_architecture_version}=require('../../lib/mirror-architecture');
-const {buildMirror}=require('../../lib/mirror-engine');
-const {ELEMENTS,ELEMENT_IDS,TARGET_MIN,PRECISION_MIN}=require('../../lib/adaptive-assessment');
-const {PRECISION_IDS}=require('../../lib/archetype-precision');
+const {validateAnswers}=require('../../../lib/assessment-validation');
+const {personalizedReport}=require('../../../lib/archetype-reports');
+const {authRequest,rest}=require('../../../lib/supabase-server');
+const {secureApi}=require('../../../lib/api-security');
+const {scoreResponses}=require('../../../lib/archetype-precision');
+const {inferArchetypes,deriveFoundations,VERSION:archetype_version}=require('../../../lib/archetype-system-v2');
+const {inferPsychologicalArchitecture,VERSION:architecture_version}=require('../../../lib/psychological-architecture');
+const {inferArchetypeRoles,VERSION:role_version}=require('../../../lib/archetype-roles');
+const {buildArchitectureMirror,VERSION:mirror_architecture_version}=require('../../../lib/mirror-architecture');
+const {buildMirror}=require('../../../lib/mirror-engine');
+const {ELEMENTS,ELEMENT_IDS,TARGET_MIN,PRECISION_MIN}=require('../../../lib/adaptive-assessment');
+const {PRECISION_IDS}=require('../../../lib/archetype-precision');
 function median(values=[]){const v=values.filter(Number.isFinite).sort((a,b)=>a-b);if(!v.length)return null;const m=Math.floor(v.length/2);return v.length%2?v[m]:Math.round((v[m-1]+v[m])/2);}
 function summarizeRows(rows=[]){const times=rows.map(r=>Number(r.response_time_ms)).filter(n=>Number.isFinite(n)&&n>0),changes=rows.map(r=>Math.max(0,Number(r.changed_count||0)));return{response_count:rows.length,median_response_time_ms:median(times),rapid_response_count:times.filter(n=>n<1200).length,changed_response_count:changes.filter(n=>n>0).length,total_changed_count:changes.reduce((a,b)=>a+b,0)};}
 function qualityEvidence(rows=[]){const overall=summarizeRows(rows),by_element={};for(const element of ELEMENTS){const ids=new Set(ELEMENT_IDS[element]||[]);by_element[element]=summarizeRows(rows.filter(r=>ids.has(r.item_id)));}const precisionRows=rows.filter(r=>PRECISION_IDS.includes(r.item_id));return{...overall,by_element,precision:summarizeRows(precisionRows)};}

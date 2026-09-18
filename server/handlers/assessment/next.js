@@ -1,6 +1,6 @@
-const {nextItem}=require('../../lib/adaptive-assessment');
-const {secureApi}=require('../../lib/api-security');
-const {validateAnswers}=require('../../lib/assessment-validation');
+const {nextItem}=require('../../../lib/adaptive-assessment');
+const {secureApi}=require('../../../lib/api-security');
+const {validateAnswers}=require('../../../lib/assessment-validation');
 module.exports=async(req,res)=>{
  if(!secureApi(req,res))return;
  try {const result=nextItem(validateAnswers(req.body?.responses||{}));

@@ -1,7 +1,7 @@
-const { authRequest, rest } = require('../../lib/supabase-server');
-const { secureApi, cleanText } = require('../../lib/api-security');
-const { compatibility, ENGINE_VERSION, ageFromDob } = require('../../lib/matching-engine-v4');
-const { applyRelationalLearning } = require('../../lib/matching-learning');
+const { authRequest, rest } = require('../../../lib/supabase-server');
+const { secureApi, cleanText } = require('../../../lib/api-security');
+const { compatibility, ENGINE_VERSION, ageFromDob } = require('../../../lib/matching-engine-v4');
+const { applyRelationalLearning } = require('../../../lib/matching-learning');
 const PROFILE_SELECT = ['user_id','first_name','current_city','location_data','gender','interested_in','relationship_intention','relationship_structure','children','age_range','max_distance'].join(',');
 async function latestModel(userId){const rows=await rest(`/person_model_snapshots?user_id=eq.${encodeURIComponent(userId)}&select=*&order=created_at.desc&limit=1`,{admin:true});const row=rows[0];if(!row)return null;return{dimensions:row.scores||{},evidence:row.confidence?.evidence||{},coverage:Number(row.confidence?.coverage||0),archetypes:row.archetypes||[],model_version:row.model_version,mirror_basis:row.evidence?.mirror_basis||null,foundations:row.evidence?.foundations||{},psychological_architecture:row.evidence?.psychological_architecture||null,archetype_roles:row.evidence?.archetype_roles||null,archetype_version:row.evidence?.archetype_version||'legacy'};}
 async function latestRelationalSelf(userId){try{const rows=await rest(`/journal_entries?user_id=eq.${encodeURIComponent(userId)}&select=body,created_at&order=created_at.desc&limit=100`,{admin:true});const found=(rows||[]).find(r=>r?.body?.type==='relational_self_snapshot'&&r?.body?.snapshot);return found?.body?.snapshot||null;}catch{return null;}}

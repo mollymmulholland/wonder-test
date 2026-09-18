@@ -1,5 +1,5 @@
-const {SUPABASE_URL,ANON,SECRET,refreshToken,setSessionCookies,clearSessionCookies}=require('../lib/supabase-server');
-const {secureApi,cleanText}=require('../lib/api-security');
+const {SUPABASE_URL,ANON,SECRET,refreshToken,setSessionCookies,clearSessionCookies}=require('../../lib/supabase-server');
+const {secureApi,cleanText}=require('../../lib/api-security');
 const attempts=new Map();
 function ipKey(req){return String(req.headers['x-forwarded-for']||req.socket?.remoteAddress||'unknown').split(',')[0].trim();}
 function allow(req,action){if(action==='refresh'||action==='logout')return true;const now=Date.now(),key=`${ipKey(req)}:${action}`,windowMs=15*60*1000,max=action==='create'?5:20;let b=attempts.get(key)||{start:now,count:0};if(now-b.start>windowMs)b={start:now,count:0};b.count++;attempts.set(key,b);if(attempts.size>2000)for(const [k,v] of attempts)if(now-v.start>windowMs)attempts.delete(k);return b.count<=max;}

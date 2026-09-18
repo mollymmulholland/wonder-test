@@ -41,5 +41,5 @@ Archetypes and matching scores are product hypotheses, not validated psychometri
 - Supabase public settings confirm email confirmation is enabled. Custom SMTP delivery and the exact deployment/branch redirect allowlist still require verification in the authenticated Supabase dashboard before inviting beta users. The dashboard is not signed in in this session.
 - Add the intended HTTPS app origins to Supabase Auth URL Configuration. For custom domains, also set WONDER_AUTH_ORIGINS on Vercel. The confirmation/reset link must be opened in the browser that requested it.
 - The preview-only /layout-check page renders the deployed app at selected CSS viewport widths; it is excluded from production builds.
-- Responsive breakpoints and reduced-motion styles are implemented. Desktop browser verification passed; physical mobile/Safari and assistive-technology testing remain before a wider release.
+- Responsive breakpoints and reduced-motion styles are implemented. Desktop browser and 390px/768px embedded viewport verification passed; physical mobile/Safari and assistive-technology testing remain before a wider release.
 - The real match pool is empty; the demonstrated Rowan introduction is fictional and does not populate real account matching.

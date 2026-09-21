@@ -1,3 +1,5 @@
+> Historical September 18 implementation record. For the current development branch, see [UNDERSTANDING-JOURNEY.md](UNDERSTANDING-JOURNEY.md). New changes are not yet deployed.
+
 # WONDER editorial beta
 
 This change extends the existing vanilla-JavaScript/Vercel application and its Supabase backend. It does not replace the production waitlist or either investor site.

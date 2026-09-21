@@ -61,7 +61,7 @@
   "outputDirectory": "dist",
   "functions": {
     "api/router.js": {
-      "includeFiles": "{lib,server}/**",
+      "includeFiles": "{lib,server,public-shared}/**",
       "maxDuration": 30
     }
   },

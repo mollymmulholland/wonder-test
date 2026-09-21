@@ -1,4 +1,5 @@
 const routes = {
+ 'journey':require('../server/handlers/journey'),
  'signup':require('../server/handlers/signup'),
  'experience':require('../server/handlers/experience'),
  'chat':require('../server/handlers/chat'),

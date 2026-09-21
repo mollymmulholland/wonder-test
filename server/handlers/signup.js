@@ -1,6 +1,7 @@
 const {SUPABASE_URL, ANON, SECRET, jsonFetch, authRequest, refreshToken, setSessionCookies, clearSessionCookies} = require('../../lib/supabase-server');
 const {secureApi, cleanText} = require('../../lib/api-security');
 const {beginFlow, readFlow, clearFlow, markRecovery, hasRecovery, clearRecovery, callbackUrl, allowAuth} = require('../../lib/auth-flows');
+const {age}=require('../../public-shared/journey');
 const pendingMessage = 'If this address can receive an account email, a link is on its way. Open it in this browser. Check your spam folder too.';
 const publicSession = (session, extra = {}) => ({user: session.user || null, expires_in: session.expires_in || 3600, token_type: 'cookie', ...extra});
 async function auth(path, body, token, method = 'POST') {
@@ -72,10 +73,10 @@ module.exports = async function handler(req, res) {
       // Resubmission through signup creates a fresh PKCE challenge for a pending account.
       requirePassword(body.password);
       if (body.adult !== true) return res.status(400).json({error: 'Please confirm that you are 18 or older.'});
-      const phone = cleanText(body.phone, 40);
-      if (phone.replace(/\D/g,'').length < 10) return res.status(400).json({error: 'Enter a valid phone number.'});
+      const years=age(body.dob);if(years===null||years<18||years>120)return res.status(400).json({error:'WONDER is for adults aged 18 and older. Enter a valid birth date.'});
+      const chosenName=cleanText(body.chosenName,80),city=cleanText(body.city,120);if(!chosenName||!city)return res.status(400).json({error:'Add your chosen name and broad city.'});
       const challenge = beginFlow(res, 'signup');
-      try {await auth(`/signup?redirect_to=${encodeURIComponent(redirect)}`, {email, password: body.password, data: {phone, adult_attested_at: new Date().toISOString()}, ...challenge});}
+      try {await auth(`/signup?redirect_to=${encodeURIComponent(redirect)}`, {email, password: body.password, data: {chosen_name:chosenName,city,adult_attested_at: new Date().toISOString()}, ...challenge});}
       catch (e) {if (!['user_already_exists','email_exists'].includes(e.data?.code || e.data?.error_code)) throw e;}
       return res.status(200).json({needs_email_confirmation: true, message: pendingMessage});
     }

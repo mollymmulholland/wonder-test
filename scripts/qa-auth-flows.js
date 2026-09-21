@@ -22,7 +22,7 @@ global.fetch = async (url, options={}) => {
 const req=(body,cookie='',origin='https://wonder.example.test')=>({method:'POST',url:'/api/signup',headers:{host:'wonder.example.test','content-type':'application/json',origin,cookie},body});
 async function run(body,cookie='',origin){const headers={};const res={setHeader(k,v){headers[k]=v;},getHeader(k){return headers[k];},status(n){this.statusCode=n;return this;},json(d){this.body=d;return this;}};calls=[];await handler(req(body,cookie,origin),res);return{...res,headers};}
 function cookieHeader(r){return(r.headers['Set-Cookie']||[]).map(x=>x.split(';')[0]).join('; ')}
-const signup={action:'create',email:'qa@example.test',password:'test-password-only',phone:'2025550187',adult:true};
+const signup={action:'create',email:'qa@example.test',password:'test-password-only',chosenName:'Test adult',dob:'1996-01-01',city:'Dallas',adult:true};
 (async()=>{
  let r=await run(signup,'','https://attacker.example');assert.equal(r.statusCode,403);assert.equal(calls.length,0);
  r=await run({...signup,adult:false});assert.equal(r.statusCode,400);assert.ok(!calls.some(x=>x.url.includes('/signup?')));

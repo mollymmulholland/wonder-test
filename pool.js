@@ -1,6 +1,6 @@
 /* The photograph is displaced in real time; taps produce waves in its surface. */
 window.WonderPool={mount(host){
- if(!host)return()=>{};const surface=host.querySelector('.pool-surface');let stopped=false,frame;
+ if(!host||document.documentElement.classList.contains('quiet-motion'))return()=>{};const surface=host.querySelector('.pool-surface');let stopped=false,frame;
  const reduced=matchMedia('(prefers-reduced-motion: reduce)');const canvas=document.createElement('canvas');canvas.setAttribute('aria-hidden','true');host.prepend(canvas);
  const gl=canvas.getContext('webgl',{alpha:false,antialias:false,powerPreference:'low-power'});
  const ring=e=>{if(reduced.matches)return;const r=host.getBoundingClientRect();const x=e.clientX?e.clientX-r.left:r.width/2,y=e.clientY?e.clientY-r.top:r.height/2;const el=document.createElement('span');el.className='ripple-ring';el.style.left=x+'px';el.style.top=y+'px';host.append(el);setTimeout(()=>el.remove(),2400);return [x/r.width,1-y/r.height]};

@@ -1,6 +1,6 @@
 # WONDER — Understanding-first journey
 
-Development revision, September 21, 2026. This document supersedes EDITORIAL-BETA.md for this branch. The hosted September 18 preview has not been changed by this revision. Do not describe this branch as production-ready.
+Development revision, September 21, 2026. This document supersedes EDITORIAL-BETA.md for this branch. Published to a protected review preview on September 21 after user approval. Production and hosted Supabase schema remain unchanged. Do not describe this branch as production-ready.
 
 ## What changed
 
@@ -32,7 +32,7 @@ Twenty archetypes remain supported, rather than silently replacing them with the
 
 | Capability | Implemented status | Remaining release work |
 |---|---|---|
-| Resettable synthetic journey | Complete in application; two named fictional adults with independent private records and separate interest actions | Browser visual review on an authorized review preview |
+| Resettable synthetic journey | Complete in application; two named fictional adults with independent private records and separate interest actions | Desktop opening, Mirror reader, introduction and independent mutual interest verified in a protected browser preview; mobile and accessibility review remain |
 | Fifteen-section reports and corrections | Implemented; supporting dimensions and archetypal material labeled separately; revised claims replace originals; private history retained | Editorial review of all twenty lenses; stronger item-level supporting excerpts and versioned assessment history |
 | Private journal, corrections, permissions, memories | Implemented UI, server event validation, optimistic versioned persistence, RLS migration, local PostgreSQL tests | Apply reviewed migration to a development Supabase project, then verify real cross-device auth and persistence |
 | Shared portrait | Text edit, exact audience preview, approval, illustrated synthetic portraits | Real photo upload, storage authorization, moderation and approval workflow. Do not activate real introductions without these. |
@@ -95,7 +95,7 @@ Synthetic records stay in a distinct sessionStorage store. They do not create Su
 
 Passed: twenty-by-fifteen section completeness; unchanged archetype/adaptive tests; adult gate; owner derivation; cross-account read denial; anonymous denial; direct mutation denial; concurrent/stale write rejection; RPC membership/version boundary; mutual interest; duplicate-message prevention; counterpart meeting acceptance; cancellation clearing queued reminder data; correction replacement; permission withdrawal; private projections; context removal; autosave; synthetic deletion; and the complete two-actor DOM journey. These are implementation tests, not scientific validation.
 
-The remote browser rejected localhost with ERR_BLOCKED_BY_CLIENT. No browser restriction was bypassed, no public tunnel was created, and no alternative browser controller was used. jsdom verification does not prove layout, focus appearance, contrast, or Safari behavior. A protected preview and real visual verification are still required before treating the interface as demo-ready.
+The remote browser rejected localhost with ERR_BLOCKED_BY_CLIENT. No browser restriction was bypassed, no public tunnel was created, and no alternative browser controller was used. jsdom verification does not prove layout, focus appearance, contrast, or Safari behavior. After publishing approval, the protected desktop preview was opened and visually inspected. The opening, fifteen-section reader, fictional portrait, pending interest and separate second-user mutuality were verified in the browser. Physical mobile, screen reader, contrast and full browser journey verification remain outstanding.
 
 ## Product decisions left explicit
 

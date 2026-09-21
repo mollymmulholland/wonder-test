@@ -61,6 +61,8 @@ A transaction in the hosted Supabase project created two isolated synthetic user
 
 Run: `npm run test:release`. No test sends a real email, message, charge, or model request.
 
+The Vercel release build completed successfully. Browser verification covered the deployed welcome, account-entry fields, 390 px phone layout, synthetic essentials, elemental map inspection, Earth chapter arrival, and saved question progression. No application console errors were observed in those checks. The phone check identified and corrected missing spacing at a responsive headline break. This browser verification does not substitute for the real-account, email, storage, and physical-device gates below.
+
 ## Remaining release gates
 
 1. Public publishing access: Vercel project `wonder-mvp-preview` has authentication protection enabled. The connected app can inspect deployments and create temporary share links, but its deployment mutation tool is unavailable; the browser and CLI have no authenticated write session. A stable public app origin still requires Vercel configuration. User publishing permission is already granted; this is an access/capability gap.

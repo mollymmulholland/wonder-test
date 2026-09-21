@@ -6,7 +6,8 @@
     "build": "node scripts/build.js",
     "dev": "node scripts/dev-server.js",
     "test:journey": "node scripts/qa-journey.js && node scripts/qa-journey-store.js && node scripts/qa-journey-api.js && node scripts/qa-journey-ui.js",
-    "test:release": "npm run test:journey && node scripts/qa-sanctuary.js && node scripts/qa-auth-flows.js && node scripts/qa-passkeys.js && node scripts/qa-introduction-release.js && node scripts/qa-local-regression.js"
+    "test:release": "npm run test:journey && node scripts/qa-sanctuary.js && node scripts/qa-auth-flows.js && node scripts/qa-passkeys.js && node scripts/qa-introduction-release.js && node scripts/qa-local-regression.js && npm run test:model",
+    "test:model": "node scripts/qa-model-runtime.js"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.3.14",

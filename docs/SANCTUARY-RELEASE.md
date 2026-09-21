@@ -35,6 +35,8 @@ The conversational runtime accepts a replaceable, explicitly configured HTTPS en
 
 Required server variables: `WONDER_INFERENCE_ENABLED=true`, `WONDER_INFERENCE_URL` (full endpoint), `WONDER_INFERENCE_MODEL`, `WONDER_INFERENCE_KEY`, and `WONDER_INFERENCE_PROTOCOL=responses|chat-completions`. No live endpoint is configured by this release. Before enabling one, establish model license/weights, compute, retention/logging, evaluations, and measured latency. `infra/inference/compose.yaml` is a deployment scaffold, not evidence that an inference host is running.
 
+The subsequent [model-host package](../infra/inference/modal_host/README.md) selects Modal Servers and a pinned Qwen3-8B candidate, with a private 64/16/32 authored train/development/holdout corpus, completion-only QLoRA and human evaluation. CPU contracts, tokenizer checks and transport tests pass; no GPU job or live model is connected. Hosting account and a proposed $50 gross experiment budget need owner action. Cloud deployment, quality and live acceptance remain release gates.
+
 The Mirror receives only submitted conversation and explicitly selected material. It has no database tools or access to another member. It can propose a memory or prepare conversational questions. A memory requires an editable preview and separate choices for retention and introduction use. Proposals are owner-bound, expire after an hour, use account-version checks, and cannot replay. Expired proposals are removed on the next request from that user. Nothing autonomously sends a message, accepts a date, or changes a portrait.
 
 ## Matching scope

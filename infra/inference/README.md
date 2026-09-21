@@ -1,5 +1,7 @@
 # Controlled Mirror runtime
 
+The prepared host choice is now [Modal Servers with a pinned Qwen3-8B baseline and QLoRA workflow](modal_host/README.md). That package includes protected serving, separate training jobs and independent human evaluation. It has passed CPU contract/tokenizer checks only; account, budget, GPU execution and quality acceptance are still outstanding. The Docker scaffold below remains an alternative host path.
+
 This scaffold uses a vLLM-compatible chat endpoint behind an operator-managed HTTPS gateway. It deliberately requires a pinned image, licensed local model weights and an existing GPU host. It has not been launched or performance-tested in this workspace.
 
 Set `WONDER_VLLM_IMAGE` to an audited `vllm/vllm-openai@sha256:...` image; `WONDER_MODEL_DIRECTORY` to a directory containing compatible approved chat-model weights and tokenizer/chat template; and `WONDER_INFERENCE_KEY` to a server secret. Ensure the selected model fits available GPU memory and its license permits the intended use. Run `docker compose up -d` from this directory. Keep port 8000 loopback-only, install the included `nginx.conf` behind valid TLS certificates (only the chat endpoint is exposed), and disable raw prompt/response logging in the proxy and host as well as the model server.

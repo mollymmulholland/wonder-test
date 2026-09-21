@@ -363,7 +363,7 @@ module.exports = async function handler(req, res) {
 
     return res.status(200).json({ ok: true, user_id: uid });
   } catch (error) {
-    console.error('Wonder persistence error', error);
+    console.error('Wonder persistence error', {status:error.status,code:error.data?.code||error.name});
     const message = String(error.message || '');
     if (/between 1 and 7|required|not found/i.test(message)) {
       return res.status(400).json({ error: message });

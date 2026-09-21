@@ -1,4 +1,7 @@
 const routes = {
+ 'passkeys':require('../server/handlers/passkeys'),
+ 'photos':require('../server/handlers/photos'),
+ 'operations':require('../server/handlers/operations'),
  'journey':require('../server/handlers/journey'),
  'signup':require('../server/handlers/signup'),
  'experience':require('../server/handlers/experience'),

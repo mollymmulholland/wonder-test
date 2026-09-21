@@ -1,4 +1,4 @@
--- Development migration. Not applied to the hosted project by this change.
+-- Applied to the hosted project on 2026-09-21.
 -- Private evidence and operational introduction objects must not share read policies.
 create table if not exists public.wonder_private_journey (
  user_id uuid primary key references auth.users(id) on delete cascade,

@@ -1,3 +1,5 @@
+> Implementation status has advanced. See [SANCTUARY-RELEASE.md](SANCTUARY-RELEASE.md) for the current state and remaining release gates.
+
 # WONDER — Understanding-first journey
 
 Development revision, September 21, 2026. This document supersedes EDITORIAL-BETA.md for this branch. Published to a protected review preview on September 21 after user approval. Production and hosted Supabase schema remain unchanged. Do not describe this branch as production-ready.

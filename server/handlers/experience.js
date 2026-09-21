@@ -13,7 +13,7 @@ module.exports=async(req,res)=>{
  try{
   if(action==='discovery_review'){
    const {ITEMS}=require('../../lib/person-model');const {PRECISION_ITEMS}=require('../../lib/archetype-precision');const {ELEMENT_IDS}=require('../../lib/adaptive-assessment');
-   validateAnswers(b.responses,true);const items=[...ITEMS,...PRECISION_ITEMS].filter(i=>Object.hasOwn(b.responses,i.id)).map(item=>{const answer=b.responses[item.id],value=n=>item.type==='scale'?String(n):item.options[n]?.label||item.options[n]?.text||item.options[n];return {item,count:Object.keys(b.responses).length,element:Object.entries(ELEMENT_IDS).find(([,ids])=>ids.includes(item.id))?.[0]||'Refinement',summary:(Array.isArray(answer)?answer:[answer]).map(value).join(' · ')};});return res.status(200).json({items});
+   validateAnswers(b.responses,false);const items=[...ITEMS,...PRECISION_ITEMS].filter(i=>Object.hasOwn(b.responses,i.id)).map(item=>{const answer=b.responses[item.id],value=n=>item.type==='scale'?String(n):item.options[n]?.label||item.options[n]?.text||item.options[n];const {options,scale,...clean}=item;const publicItem={...clean,options:options?.map(({w,dimension,...o})=>o)};return {item:publicItem,count:Object.keys(b.responses).length,element:Object.entries(ELEMENT_IDS).find(([,ids])=>ids.includes(item.id))?.[0]||'Refinement',summary:(Array.isArray(answer)?answer:[answer]).map(value).join(' · ')};});return res.status(200).json({items});
   }
   if(action==='catalog')return res.status(200).json({reports:catalog()});
   if(action==='demo_report') {const report=reportFor(b.name);return report?res.status(200).json({report,demo:true}):res.status(400).json({error:'Unknown archetype.'});}

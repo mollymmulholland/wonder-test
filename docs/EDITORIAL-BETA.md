@@ -1,3 +1,5 @@
+> Implementation status has advanced. See [SANCTUARY-RELEASE.md](SANCTUARY-RELEASE.md) for the current state and remaining release gates.
+
 > Historical September 18 implementation record. For the current development branch, see [UNDERSTANDING-JOURNEY.md](UNDERSTANDING-JOURNEY.md). New changes are not yet deployed.
 
 # WONDER editorial beta

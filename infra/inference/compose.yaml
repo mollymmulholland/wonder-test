@@ -1,0 +1,35 @@
+# Requires an approved GPU host, pinned vLLM image, local model weights and TLS gateway.
+# This file does not provision infrastructure or download a model implicitly.
+services:
+  mirror-model:
+    image: ${WONDER_VLLM_IMAGE:?Set an audited vllm/vllm-openai image digest}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ${WONDER_MODEL_DIRECTORY:?Set the path of licensed local model weights}:/model:ro
+    environment:
+      VLLM_API_KEY: ${WONDER_INFERENCE_KEY:?Set a strong server-only key}
+      VLLM_NO_USAGE_STATS: "1"
+      HF_HUB_OFFLINE: "1"
+      DO_NOT_TRACK: "1"
+    command:
+      - --model
+      - /model
+      - --served-model-name
+      - wonder-mirror
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --max-model-len
+      - "8192"
+      - --disable-log-requests
+    shm_size: "4gb"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

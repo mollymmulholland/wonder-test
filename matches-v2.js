@@ -1,33 +1,59 @@
 (()=>{
-  const read=()=>{try{return JSON.parse(localStorage.getItem('wonder_preview_state')||'{}')}catch{return{}}};
-  const grid=document.getElementById('matchGrid');if(!grid)return;
-  const css=`
-  .match-live-card{border:1px solid rgba(25,24,21,.17);border-radius:26px;padding:24px;margin:16px 0;background:rgba(255,255,255,.2)}
-  .match-live-kicker{font-size:11px;letter-spacing:.16em;text-transform:uppercase;opacity:.55;margin-bottom:8px}.match-live-card h3{font-family:'Libre Caslon Display',serif;font-size:34px;font-weight:400;margin:0 0 6px}.match-live-place{opacity:.58;margin-bottom:18px}.match-live-fit{display:inline-block;border:1px solid rgba(25,24,21,.2);border-radius:999px;padding:7px 12px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:18px}.match-live-reasons{display:grid;gap:10px;margin-top:8px}.match-live-reason{font-size:15px;line-height:1.45;padding-top:10px;border-top:1px solid rgba(25,24,21,.1)}
-  .match-live-actions{display:flex;gap:10px;margin-top:22px;flex-wrap:wrap}.match-live-actions button{border-radius:999px;padding:12px 18px;font:inherit;letter-spacing:.08em;text-transform:uppercase;font-size:11px}.match-explore{background:#1d1c19;color:#f7f2e8;border:1px solid #1d1c19}.match-decline{background:transparent;color:#1d1c19;border:1px solid rgba(25,24,21,.25)}.match-live-message{margin-top:14px;font-size:14px;opacity:.65}
-  .match-live-empty{padding:48px 0;max-width:560px}.match-live-empty h3{font-family:'Libre Caslon Display',serif;font-size:38px;font-weight:400;margin:0 0 16px}.match-live-empty p{line-height:1.65;opacity:.65}
-  `;const style=document.createElement('style');style.textContent=css;document.head.appendChild(style);
+  const grid=document.getElementById('matchGrid');
+  if(!grid)return;
 
-  function fitLabel(score,confidence){if(confidence<.35)return'Early signal';if(score>=84)return'Strong potential';if(score>=72)return'Promising';return'Worth exploring';}
+  const css=`
+  .match-found{max-width:860px;margin:0 auto;padding:8vh 0 5vh}.match-found-kicker{font-size:10px;letter-spacing:.2em;text-transform:uppercase;opacity:.48;margin-bottom:18px}.match-found-title{font-family:'Libre Caslon Display',serif;font-size:clamp(54px,8vw,96px);font-weight:400;line-height:.92;margin:0 0 42px}.match-live-card{border-top:1px solid rgba(25,24,21,.18);border-bottom:1px solid rgba(25,24,21,.18);padding:34px 0;margin:0;background:transparent}.match-live-card h3{font-family:'Libre Caslon Display',serif;font-size:48px;font-weight:400;margin:0 0 8px}.match-live-place{opacity:.56;margin-bottom:22px}.match-live-fit{display:inline-block;font-size:10px;letter-spacing:.18em;text-transform:uppercase;margin-bottom:26px;opacity:.62}.match-live-reasons{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:12px}.match-live-reason{font-size:16px;line-height:1.6;padding-top:14px;border-top:1px solid rgba(25,24,21,.1)}.match-simulation{margin-top:40px;padding-top:30px;border-top:1px solid rgba(25,24,21,.14)}.match-simulation>span{display:block;font-size:10px;letter-spacing:.18em;text-transform:uppercase;opacity:.45;margin-bottom:20px}.match-sim-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}.match-sim-grid article{padding-top:14px;border-top:1px solid rgba(25,24,21,.1)}.match-sim-grid small{display:block;font-size:9px;letter-spacing:.14em;text-transform:uppercase;opacity:.4;margin-bottom:8px}.match-sim-grid p{font-size:14px;line-height:1.55;margin:0;opacity:.76}.match-live-actions{display:flex;gap:10px;margin-top:32px;flex-wrap:wrap}.match-live-actions button{border-radius:999px;padding:13px 20px;font:inherit;letter-spacing:.1em;text-transform:uppercase;font-size:10px}.match-explore{background:#1d1c19;color:#f7f2e8;border:1px solid #1d1c19}.match-decline{background:transparent;color:#1d1c19;border:1px solid rgba(25,24,21,.25)}.match-live-message{margin-top:16px;font-size:14px;opacity:.65}.match-live-empty{padding:15vh 0;max-width:620px;margin:0 auto;text-align:center}.match-live-empty h3{font-family:'Libre Caslon Display',serif;font-size:clamp(46px,7vw,72px);font-weight:400;line-height:.98;margin:0 0 22px}.match-live-empty p{line-height:1.7;opacity:.64;max-width:520px;margin:auto}
+  @media(max-width:700px){.match-live-reasons,.match-sim-grid{grid-template-columns:1fr}.match-found{padding-top:4vh}.match-live-card h3{font-size:40px}}
+  `;
+  const style=document.createElement('style');style.textContent=css;document.head.appendChild(style);
+
+  function convictionLabel(m){if(m.conviction==='strong')return'Wonder has strong conviction';if(m.conviction==='promising')return'Wonder sees meaningful potential';return'Worth understanding';}
   function escape(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-  function renderCard(m,i){const strengths=m.rationale?.strengths||[],tensions=m.rationale?.tensions||[],reasons=[...strengths.slice(0,2),...(tensions.length?[`Something to understand: ${tensions[0]}`]:[])];return `<article class="match-live-card" data-match-id="${escape(m.match_id||'')}" data-candidate-id="${escape(m.candidate_user_id||'')}"><div class="match-live-kicker">Introduction ${String(i+1).padStart(2,'0')}</div><h3>${escape(m.first_name||'Someone worth meeting')}</h3><div class="match-live-place">${escape(m.current_city||'Location private')}${m.distance_miles!=null?` · ${Math.round(m.distance_miles)} mi`:''}</div><div class="match-live-fit">${fitLabel(Number(m.score||0),Number(m.confidence||0))}</div><div class="match-live-reasons">${reasons.map(x=>`<div class="match-live-reason">${escape(x)}</div>`).join('')||'<div class="match-live-reason">Wonder sees enough compatibility to make this introduction worth exploring.</div>'}</div>${m.match_id?'<div class="match-live-actions"><button class="match-explore" type="button">Explore</button><button class="match-decline" type="button">Not for me</button></div><div class="match-live-message"></div>':''}</article>`;}
+  function simulationBlock(m){const sim=m.rationale?.simulation;if(!sim?.stages)return'';const chosen=['early_attraction','intimacy_formation','conflict_cycle'].map(k=>sim.stages[k]).filter(Boolean);return `<section class="match-simulation"><span>What Wonder is actually testing</span><div class="match-sim-grid">${chosen.map(x=>`<article><small>${escape(x.label)}</small><p>${escape(x.body)}</p></article>`).join('')}</div></section>`;}
+  function renderCard(m){const strengths=m.rationale?.strengths||[],tensions=m.rationale?.tensions||[],reasons=[...strengths.slice(0,2),...(tensions.length?[`Worth understanding: ${tensions[0]}`]:[])];return `<div class="match-found"><div class="match-found-kicker">Your introduction</div><h2 class="match-found-title">We found someone.</h2><article class="match-live-card" data-match-id="${escape(m.match_id||'')}" data-candidate-id="${escape(m.candidate_user_id||'')}"><h3>${escape(m.first_name||'Someone worth meeting')}</h3><div class="match-live-place">${escape(m.current_city||'Location private')}${m.distance_miles!=null?` · ${Math.round(m.distance_miles)} mi`:''}</div><div class="match-live-fit">${convictionLabel(m)}</div><div class="match-live-reasons">${reasons.map(x=>`<div class="match-live-reason">${escape(x)}</div>`).join('')||'<div class="match-live-reason">Wonder sees enough alignment and relational fit to believe this person is worth your attention.</div>'}</div>${simulationBlock(m)}${m.match_id?'<div class="match-live-actions"><button class="match-explore" type="button">Explore this person</button><button class="match-decline" type="button">Not for me</button></div><div class="match-live-message"></div>':''}</article></div>`;}
 
   async function react(card,reaction){
-    const s=read(),token=s.auth?.accessToken,matchId=card.dataset.matchId;if(!token||!matchId)return;
-    const buttons=card.querySelectorAll('.match-live-actions button');buttons.forEach(b=>b.disabled=true);const msg=card.querySelector('.match-live-message');
-    try{const r=await fetch('/api/matches/generate',{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},body:JSON.stringify({action:'reaction',match_id:matchId,reaction})});if(!r.ok)throw new Error();if(reaction==='decline'){card.style.transition='opacity .25s';card.style.opacity='.25';msg.textContent='Wonder will use that signal and move on.';setTimeout(()=>card.remove(),420);}else{msg.textContent='Noted. Wonder will keep this introduction open for you.';card.querySelector('.match-explore').textContent='Exploring';}}
-    catch{msg.textContent='Wonder could not save that choice yet.';buttons.forEach(b=>b.disabled=false);}
+    const matchId=card.dataset.matchId;
+    if(!matchId)return;
+    const buttons=card.querySelectorAll('.match-live-actions button');
+    buttons.forEach(b=>b.disabled=true);
+    const msg=card.querySelector('.match-live-message');
+    try{
+      const r=await fetch('/api/matches/generate',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'reaction',match_id:matchId,reaction})});
+      if(r.status===401){msg.textContent='Your session expired. Sign in again to continue.';buttons.forEach(b=>b.disabled=false);return;}
+      if(!r.ok)throw new Error();
+      if(reaction==='decline'){
+        msg.textContent='Understood. Wonder will use your choice as a signal about you, not as a judgment of them.';
+        setTimeout(renderLive,850);
+      }else{
+        msg.textContent='This introduction will stay open. The next step is simply to discover whether the hypothesis exists in real life.';
+        const explore=card.querySelector('.match-explore');if(explore)explore.textContent='Introduction open';
+      }
+    }catch{
+      msg.textContent='Wonder could not save that choice yet.';
+      buttons.forEach(b=>b.disabled=false);
+    }
   }
 
   async function renderLive(){
-    const s=read(),token=s.auth?.accessToken;if(!token){grid.innerHTML='<div class="match-live-empty"><h3>Your introductions will live here.</h3><p>Sign in and complete your Mirror before Wonder begins making introductions.</p></div>';return;}
-    grid.innerHTML='<div class="match-live-empty"><h3>Wonder is looking for fit.</h3><p>Checking practical compatibility, values, relationship needs, and how each person tends to repair disconnection.</p></div>';
-    try{const r=await fetch('/api/matches/generate',{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},body:'{}'});const d=await r.json().catch(()=>({}));if(r.status===409){grid.innerHTML='<div class="match-live-empty"><h3>First, let Wonder understand you.</h3><p>Complete your current Mirror before introductions begin. Wonder does not want to rank people from a half-built picture of you.</p></div>';return;}if(!r.ok)throw new Error();if(!Array.isArray(d.matches)||!d.matches.length){grid.innerHTML='<div class="match-live-empty"><h3>No introduction just for the sake of one.</h3><p>Wonder has not found enough eligible people with completed profiles yet. This space will populate only when there is someone genuinely worth considering.</p></div>';return;}grid.innerHTML=d.matches.map(renderCard).join('');}
-    catch{grid.innerHTML='<div class="match-live-empty"><h3>Introductions are still taking shape.</h3><p>Your profile is safe. Wonder will try again when the matching pool is ready.</p></div>';}
+    grid.innerHTML='<div class="match-live-empty"><h3>Wonder is looking.</h3><p>Not for the highest score. For a relationship hypothesis with enough archetypal recognition, practical coherence, and evidence that the two of you could remain yourselves inside it.</p></div>';
+    try{
+      const r=await fetch('/api/matches/generate',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:'{}'});
+      const d=await r.json().catch(()=>({}));
+      if(r.status===401){grid.innerHTML='<div class="match-live-empty"><h3>Your introduction will live here.</h3><p>Sign in and complete your Mirror before Wonder begins looking.</p></div>';return;}
+      if(r.status===409){grid.innerHTML='<div class="match-live-empty"><h3>First, let Wonder understand you.</h3><p>Complete your Mirror before introductions begin. Wonder will not make a recommendation from a half-built picture.</p></div>';return;}
+      if(!r.ok)throw new Error(d.error||'Unable to load introductions.');
+      if(!Array.isArray(d.matches)||!d.matches.length){grid.innerHTML='<div class="match-live-empty"><h3>Not yet.</h3><p>There are eligible people in the world. Wonder just does not have enough conviction about one of them yet. No introduction is better than one made simply to keep you engaged.</p></div>';return;}
+      grid.innerHTML=renderCard(d.matches[0]);
+    }catch{
+      grid.innerHTML='<div class="match-live-empty"><h3>Introductions are still taking shape.</h3><p>Your profile is safe. Wonder will look again when the matching pool is ready.</p></div>';
+    }
   }
 
   grid.addEventListener('click',e=>{const card=e.target.closest('.match-live-card');if(!card)return;if(e.target.closest('.match-explore'))react(card,'explore');if(e.target.closest('.match-decline'))react(card,'decline');});
   document.addEventListener('click',e=>{if(e.target.closest('[data-next="matches"]'))setTimeout(renderLive,80)},true);
-  const observer=new MutationObserver(()=>{if(document.getElementById('matches')?.classList.contains('active'))renderLive();});observer.observe(document.getElementById('matches'),{attributes:true,attributeFilter:['class']});
+  const observer=new MutationObserver(()=>{if(document.getElementById('matches')?.classList.contains('active'))renderLive();});
+  observer.observe(document.getElementById('matches'),{attributes:true,attributeFilter:['class']});
   if(!document.querySelector('script[data-relational-curiosity]')){const script=document.createElement('script');script.src='relational-curiosity.js';script.dataset.relationalCuriosity='1';document.body.appendChild(script);}
 })();

@@ -141,3 +141,11 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Model work: never publish training corpora, credentials, weights or raw evaluations.
+model-private/
+.venv-model/
+**/__pycache__/
+*.pyc
+*.safetensors
+*.gguf

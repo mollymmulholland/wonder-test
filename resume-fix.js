@@ -3,7 +3,7 @@
   const readState=()=>{try{return JSON.parse(localStorage.getItem('wonder_preview_state')||'{}')}catch{return{}}};
   const readAssessment=()=>{try{return JSON.parse(localStorage.getItem('wonder_assessment_v2')||'{}')}catch{return{}}};
   const hasAccount=s=>!!(s.account&&(s.account.email||s.account.phone));
-  const hasSession=s=>!!(s.auth?.accessToken&&s.account?.persistence==='supabase');
+  const hasSession=s=>!!(s.auth?.mode==='httpOnly-cookie'&&s.account?.persistence==='httpOnly-cookie');
   const hasEssentials=s=>!!(s.essentials&&Object.values(s.essentials).some(Boolean));
   const hasBirth=s=>!!(s.birth&&(s.birth.dob||s.birth.pob||s.birth.tob));
 

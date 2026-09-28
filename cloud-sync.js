@@ -2,44 +2,12 @@
   const read=()=>{try{return JSON.parse(localStorage.getItem('wonder_preview_state')||'{}')}catch{return {}}};
   const readPlaces=()=>{try{return JSON.parse(localStorage.getItem('wonder_place_meta')||'{}')}catch{return {}}};
   let timer=null;
-
   async function syncNow(){
-    const s=read();
-    const token=s.auth?.accessToken;
-    if(!token) return;
-    try{
-      const r=await fetch('/api/persist',{
-        method:'POST',
-        headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},
-        body:JSON.stringify({birth:s.birth||null,essentials:s.essentials||null,answers:s.answers||null,places:readPlaces()})
-      });
-      const data=await r.json().catch(()=>({}));
-      if(!r.ok) throw new Error(data.error||'Sync failed');
-      const next=read();
-      next.cloud={...(next.cloud||{}),lastSyncedAt:new Date().toISOString(),userId:data.user_id,status:'synced'};
-      try{localStorage.setItem('wonder_preview_state',JSON.stringify(next));}catch{}
-    }catch(err){
-      const next=read();
-      next.cloud={...(next.cloud||{}),status:'pending',lastError:err.message};
-      try{localStorage.setItem('wonder_preview_state',JSON.stringify(next));}catch{}
-    }
-  }
-
+    const s=read();if(s.auth?.mode!=='httpOnly-cookie')return;
+    try{const r=await fetch('/api/persist',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({birth:s.birth||null,essentials:s.essentials||null,answers:s.answers||null,places:readPlaces()})});const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.error||'Sync failed');const next=read();next.cloud={...(next.cloud||{}),lastSyncedAt:new Date().toISOString(),userId:data.user_id,status:'synced'};localStorage.setItem('wonder_preview_state',JSON.stringify(next));}catch(err){const next=read();next.cloud={...(next.cloud||{}),status:'pending',lastError:err.message};localStorage.setItem('wonder_preview_state',JSON.stringify(next));}}
   function schedule(){clearTimeout(timer);timer=setTimeout(syncNow,250);}
-  document.addEventListener('click',e=>{
-    if(e.target.closest('#birthContinue,#essentialsContinue,#nextQuestion,.option,#visualContinue,#skipVisual,.wonder-place-option')) schedule();
-  },true);
-  window.addEventListener('focus',schedule);
-  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')schedule();});
-  setTimeout(syncNow,500);
-  window.wonderCloudSync=syncNow;
-
-  if(!document.querySelector('link[href="adaptive-assessment.css"]')){
-    const link=document.createElement('link');link.rel='stylesheet';link.href='adaptive-assessment.css';document.head.appendChild(link);
-  }
-  for(const src of ['adaptive-assessment.js','assessment-completion-sync.js','ux-polish.js','feedback-sync.js','matches-v2.js','mirror-v2.js']){
-    if(!document.querySelector(`script[src="${src}"]`)){
-      const script=document.createElement('script');script.src=src;script.defer=true;document.body.appendChild(script);
-    }
-  }
+  document.addEventListener('click',e=>{if(e.target.closest('#birthContinue,#essentialsContinue,#nextQuestion,.option,#visualContinue,#skipVisual,.wonder-place-option'))schedule();},true);
+  window.addEventListener('focus',schedule);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')schedule();});setTimeout(syncNow,500);window.wonderCloudSync=syncNow;
+  if(!document.querySelector('link[href="adaptive-assessment.css"]')){const link=document.createElement('link');link.rel='stylesheet';link.href='adaptive-assessment.css';document.head.appendChild(link);}
+  for(const src of ['adaptive-assessment.js','assessment-completion-sync.js','ux-polish.js','feedback-sync.js','matches-v2.js','mirror-v2.js'])if(!document.querySelector(`script[src="${src}"]`)){const script=document.createElement('script');script.src=src;script.defer=true;document.body.appendChild(script);}
 })();

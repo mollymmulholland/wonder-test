@@ -1,5 +1,6 @@
 const fs=require('fs'),path=require('path');
 const dest=path.join(__dirname,'..','dist');fs.rmSync(dest,{recursive:true,force:true});fs.mkdirSync(dest,{recursive:true});
+fs.copyFileSync(path.join(__dirname,'..','privacy.html'),path.join(dest,'privacy.html'));
 for(const name of ['index.html','app.js','pool.js','editorial.css','journey.css','journey-ui.js','sanctuary.js','sanctuary.css','interface.css','device-ui.js','operations-ui.js','manifest.webmanifest','service-worker.js','offline.html','public-shared','assets'])fs.cpSync(path.join(__dirname,'..',name),path.join(dest,name),{recursive:true});
 console.log('Built WONDER public assets. Backend source is excluded from the static output.');
 

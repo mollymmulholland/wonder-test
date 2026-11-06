@@ -1,4 +1,5 @@
 const routes = {
+ 'health':require('../server/handlers/health'),
  'passkeys':require('../server/handlers/passkeys'),
  'photos':require('../server/handlers/photos'),
  'operations':require('../server/handlers/operations'),

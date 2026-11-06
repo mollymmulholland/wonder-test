@@ -1,0 +1,102 @@
+# Controlled beta privacy and operating review
+
+Reviewed November 6, 2026 against PR #6 head `2bd548878fc569907c0df2704fb2939d671a7304` and main `0b009f42da72a548c0897791564fddb68d72dbaf`.
+
+**Status: corrected draft; publication approval and operational acceptance are outstanding.** This review does not authorize invitations, production promotion, a service-plan change, or enabling live inference. Preserve the health endpoint, anonymous smoke checks, privacy links, and existing product implementation. Deployment/security gates remain in [BETA-ACCEPTANCE.md](BETA-ACCEPTANCE.md).
+
+## Evidence and claim corrections
+
+“Implemented” below means supported by the reviewed source, not reverified against the inactive hosted database. Production configuration, grants and migrations must still be inspected after service restoration.
+
+| Topic | What the evidence establishes | Correction or remaining limitation |
+|---|---|---|
+| Account and discovery | `server/handlers/signup.js`, `public-shared/journey.js`, assessment handlers and migrations store account details, full DOB, answers, derived results, corrections/history and permissions. | Disclose sensitive preferences and retained history; do not imply collecting only an age-eligibility flag. The adult gate is self-reported DOB, not identity verification. |
+| Other-member visibility | `journey.shared()` and `pairView()` expose the member-approved portrait before mutual interest. Messages and plans open on mutual interest. | Distinguish member approval of text from operator photo review. Shared text and planning fields can themselves contain sensitive information. |
+| Introduction inputs | `lib/introduction-engine.js` and `lib/matching-service.js` use reciprocal requirements, a subset of permitted assessment dimensions, shared topics and planning preferences. Correction choices exclude dimensions. | Current ranking does not read journal, message, private feedback, raw correction or memory text. A stored memory-use permission is not evidence that memories affect matching. |
+| Human review | `server/handlers/operations.js` implements photo decisions and cohort membership; `matching-service.js` creates pairs automatically. | No separate human approval for each pair or individual Mirror claim. Resolve the earlier governance requirement described below. |
+| Operator access | Operations returns selected member metadata, photos, reports, memberships and pending deletions. Its server reads private journey records to assemble that response. `lib/operations.js` gives owner/admin/operator/moderator the same operations access. | Do not promise distinct least-privilege moderator roles or that operators cannot access private material. Privileged service administration can access additional records. |
+| Pausing and blocking | `contactPermitted()` permits an existing mutual connection after an availability pause; pair blocking stops further pair contact. | Say “pause new introductions.” Neither blocking nor deletion erases recipients' external copies. Disabling cohort membership is not a complete suspension of existing contact. |
+| Export | `server/handlers/journey.js` exports current journey plus ten selected tables, not `wonder_connections`, photo bytes or operations/provider records. | Do not call this a full export of everything WONDER holds. Provide an authenticated manual request route for omitted personal data, with third-party information reviewed before disclosure. |
+| Photos | `server/handlers/photos.js` re-encodes uploads without EXIF/original filename; removing a photo clears the portrait pointer and pauses availability. Historical files/rows remain; owners/operators can still retrieve them. | Disclosure now separates unsharing from erasure. No timed old-photo cleanup exists. Account erasure attempts all tracked files; legacy imported storage can require manual handling. |
+| Account deletion | `lib/account-deletion.js` creates an access-denial receipt, deletes tracked photo objects and audit records, hard-deletes Auth, then marks completion. Linked rows cascade. | Withdrawal starts only after receipt creation succeeds. Cleanup failure with a receipt returns pending, not complete. Queue retries are essential. Deleting either member removes the stored connection, messages and plan. |
+| Surviving reports | Sanctuary migration: `reporter_id ON DELETE CASCADE`; `subject_id` and `connection_id ON DELETE SET NULL`. | Reports submitted by the deleted account disappear. Other people's reports can survive with free text still identifying that person; null identifiers are not anonymization. Resolving a report does not delete it. |
+| Deletion receipts | `wonder_account_deletions` stores user ID, requested time, status and completed time without an Auth foreign key or expiry. | Describe these fields and lack of automatic expiry. Do not claim the receipt is temporary or anonymous. Retention and restore handling need approval. |
+| Security records | `lib/auth-flows.js` uses keyed hashes for request buckets. The limiter SQL deletes rows more than one day past expiry when another limiter call runs. Passkey challenge and AI-proposal cleanup is also request-triggered. | Expiry of validity is not a guaranteed physical-deletion deadline. No blanket “all logs deleted within 24 hours” claim. Provider logs are separate. |
+| Browser data | Auth helpers set session/confirmation/recovery cookies. Demo text/progress use tab session storage. Service worker caches the offline page/style. | Add browser-storage disclosure; exports/screenshots/calendar files are outside account deletion. Do not claim that nothing is stored on a device. |
+| Providers | Vercel project `wonder-app`, Supabase project `ernpiurftcjkvnicogsp`, font requests in shipped HTML, and `/api/places` source identify Vercel, Supabase, Google Fonts and conditional Nominatim use. Database metadata reports `ca-central-1`. | Nominatim is a callable legacy place-search route; current city entry does not call it. Disclose conditional use, not continuous geolocation. Canada is the database setting, not a claim all vendors process only there. |
+| Live inference | November 6 Vercel project-variable inventory contains no `WONDER_INFERENCE_*` keys. `mirror-runtime.js` requires an enabled flag plus explicit endpoint/model/key. Research consent is forced false. | The unused legacy model-key variable and model-host scaffolding do not establish an active provider. Retest the exact deployment before publication; keep live inference/research/training deferred. No training or zero-retention guarantee about third-party providers. |
+
+## Facts recovered without a new founder questionnaire
+
+- PR #6 remained open, draft and mergeable at the start of this review, last updated November 4. Main and the engineering patch were preserved.
+- Supabase project metadata on November 6 still reports `INACTIVE`; the organization reports Free. No restoration, billing action or hosted-data mutation was performed in this review.
+- Vercel identifies the existing `wonder-app` project under the WONDER team. Current project-variable inventory supports the disabled-inference position, but is not an attestation of every historical deployment's environment.
+- The existing readiness report explicitly leaves contact, SMTP, retention and named coverage unresolved. The governance outline sets requirements, not actual assignments or vendor settings. Neither establishes a staffed mailbox or retention schedule.
+- A connected transactional-email account was inspected. Its domain inventory did not identify a WONDER sending domain. Account existence and provider marketing emails do not establish the SMTP service or send-email hook used by this Supabase project.
+- Current tools expose project status but not the hosted Auth SMTP/hook configuration or an actual backup inventory. No authenticated dashboard session was available. Those settings remain unverified, not inferred absent. No test mail was sent.
+
+## Publication decisions and the evidence needed to close them
+
+| Item | Proposed next step | Decision / verification still required |
+|---|---|---|
+| Responsible entity and contact | Identify the person/entity responsible for this beta. Use an existing accessible business mailbox if available, with separate backup access. A founder mailbox is a possible temporary option only with express approval to publish it. | Founder chooses the public identity and address; verify inbound delivery while signed out, reply capability and backup access. A prior mention of a company address is not a mailbox test. Do not invent `support@` or treat a no-reply address as support. |
+| Account-email processing | Read Supabase Auth SMTP host or send-email-hook settings, then inspect the identified vendor's verified sender and terms. | Record vendor, sender, Reply-To, recipients/content processed, tracking, delivery-log retention, region/subprocessors as applicable and deletion route. Send two controlled-inbox tests only in the account-acceptance workflow. Do not ask the founder to reconstruct settings from memory. |
+| Support records | Use one restricted case register and one monitored contact route; keep message content out of public issues. | Name mailbox/register provider, authorized users, identity-verification process, retention and closure/deletion handling. No default response deadline is asserted by this draft. |
+| Retention | Approve category-specific deletion triggers, exceptions, review cadence and a responsible operator using the inventory below. | No unapproved numerical retention period has been inserted. A schedule needs a workable procedure or code, not just wording. |
+| Backup and recovery | Inspect actual database backup/PITR availability, separate photo-file copies, any manual exports, vendor log settings and backup expiry. | Approve access, location, expiry and restoration procedure. Record “not available” if verified; do not promise recoverability from a plan name. Reconcile deletion requests and content-level deletions/corrections before reopening a restored service. |
+| Human-review scope | For the smallest beta, propose photo review + controlled cohort approval + rules-based pairs, with live inference off and review of reported interpretation problems. | Founder must explicitly reconcile this with the earlier requirement for human approval of each introduction and sensitive Mirror claim. If that requirement remains, implement enforceable approval queues before invitations. Cohort approval is not a substitute. |
+| Coverage | Founder as member-operations primary; a named second person as trained backup and technical responder, if capable. | Both accept specific windows, handoff, access and absence procedure. No candidate, adviser, NDA recipient or account administrator is assumed committed. If the second person lacks technical access/skills, name an additional engineer. |
+| Privacy requests and legal scope | Prepare manual access/correction/deletion/appeal handling, including export omissions and records supplied by others. | Review responsible entity, applicable jurisdiction, sensitive-data consent and request requirements before final approval. Small-cohort size does not alone decide legal applicability. Any required legal deadline overrides an internal support target. |
+
+Do not remove the visible draft label or publication-hold comments from `privacy.html` until the applicable rows close. Replace the contact placeholder with the exact tested route, finalize the email/provider and retention paragraphs, record founder approval and effective date, then recheck the shipped notice. Draft corrections do not approve business practices by implication.
+
+## Retention inventory and recommended treatment
+
+The “recommended” column proposes work to approve; it does not describe a running deletion service.
+
+| Category | Implemented lifecycle | Recommended beta treatment, pending approval |
+|---|---|---|
+| Accounts, assessments, reports, correction history | Saved until relevant explicit deletion/account cascade; no general inactivity expiry. | State the active-account purpose and account-deletion trigger; decide how incomplete/abandoned accounts will be reviewed. Do not equate permission withdrawal with deletion. |
+| Journals and memories | Explicit delete/forget; journal deletion removes linked memories in current journey. Correction history is separate. | Verify selective deletion in hosted data. Do not carry deleted content into support logs or manual exports; record restore exclusions without copying its body. |
+| Current and superseded photos | Historical files remain until account erasure or manual removal. | Prefer a reviewed old-photo cleanup process or narrowly scoped implementation before invitations. If temporarily retaining until account deletion, explicitly approve that tradeoff and disclose it. Include storage objects, metadata and abandoned uploads. |
+| Connections/messages/plans | Stored pair cascades on either account deletion; blocking/closing alone does not purge the stored pair. | Keep necessary active relationship records; decide handling of inactive/closed pairs. Do not promise recoverable chat history after the other member deletes. |
+| Support/incident records | Reporter deletion removes own in-app reports; other reporters' text can remain; resolved rows have no expiry. | Choose resolution-based retention and minimal exceptions for open incidents/legal obligations. Review free text and subject-access requests; preserve necessary incident evidence before a reporter's deletion only under an approved policy. |
+| External support mail/register | Outside application deletion. Provider/settings not established. | Apply an approved case-retention rule to inbox, attachments, trash, delegated copies and any register. Track requests manually until automation is justified. |
+| Deletion receipts | Retained without timed expiry; enforce denied access. | Retain sufficient restricted deletion evidence to prevent reactivation and replay deletions after restore. Approve duration against token and actual backup horizons before introducing expiry; do not simply delete receipts as a cleanup step. |
+| Rate-limit/challenge/proposal records | Validity expires; physical cleanup requires subsequent traffic. | Disclose event-based cleanup accurately; decide whether scheduled cleanup is necessary. Provider logs need their own settings review. |
+| Provider logs, database backups, file copies, manual exports | Not erased by the account endpoint; actual inventory unverified. | Verify each separately. Database backups do not contain Supabase Storage file bytes. Do not promise a backup, a fixed period or erasure of all copies until supported. |
+
+## Minimum operating coverage
+
+Start with 6–10 invited Dallas adults with reciprocal preferences as a proposed capacity limit, not a claim that registration is invite-only. The existing cohort gate limits introductions, not signup. If control must include every account's data, add and verify a server-enforced registration restriction, including direct Auth signup behavior.
+
+| Essential duty | Proposed primary / backup | Concrete work |
+|---|---|---|
+| Public privacy/support route | Founder / trained backup | Review signed-out requests, verify identity proportionately without passwords, avoid account-existence disclosure, record owner/status and securely fulfill omitted exports. |
+| Photos and cohort | Founder / trained backup | Review current photos, record outcomes, approve only the intended cohort, check eligibility and queue capacity. No identity/safety certification. |
+| Abuse and incidents | Founder coordinates / technical responder contains | Triage reports, protect affected members, preserve minimal evidence, determine communications and any applicable notification obligations. Never paste member content into this repository. |
+| Pending deletions | Technical responder / second trained person with escalation access | Inspect pending entries, resolve storage/legacy failures, retry, verify object/row removal and receipt status. A queue item marked pending is not completed deletion. |
+| Availability and recovery | Technical responder / founder coordinates escalation | Inspect health and account-recovery failures, hold invitations, roll back or restrict affected service, verify restored data against deletion/permission records. |
+| Retention and access review | Founder / technical responder | Maintain the provider/data inventory, check completed cases, stale files, temporary exports and staff access against the approved schedule. |
+
+For this size, propose two explicit queue checks on each operating day, including agreed weekend coverage while the beta is active, plus a weekly retention/access review. These are internal staffing proposals, not public response promises. Put the agreed actual coverage hours in invitations; do not promise immediate or 24/7 response. Arrange a direct escalation route between the two people and a handoff before absences. If coverage lapses, stop invitations and cohort expansion; determine whether active functions also need restriction.
+
+The current role names all grant the same operations actions. Train the backup accordingly, use separate accounts, and restrict infrastructure credentials to the technical responder. A new permission grant requires a separate authorized access change. Do not describe fine-grained role separation as implemented.
+
+Keep a private register with case ID, received time, category, minimum necessary account reference, owner/backup, status, next action, any applicable deadline, outcome and retention trigger. A restore runbook must cover both whole-account deletions and later changes to journals, photos, corrections and permissions: replaying account tombstones alone is insufficient. Restore in isolation, reconcile those changes, test access, then reopen.
+
+For a suspected data exposure, restrict the affected function or service and involve the technical responder; merely disabling cohort approvals does not terminate existing mutual contact or account access. Keep member safety reports and legal notification assessment distinct from product troubleshooting. WONDER is not an emergency service.
+
+Functions reasonably deferred: live conversational inference and its evaluations; model training/research enrollment; per-pair human approval **only if the governance scope change is expressly accepted**; automated support routing; a dedicated moderation hire; native distribution, payments, push/reminders; advanced analytics and public transparency reporting. Manual coverage, privacy-request handling, deletion retries, access review and incident containment cannot be deferred.
+
+## Validation and independent launch gates
+
+Local verification passed on November 6: `npm run test:release`, `npm run build`, and `git diff --check`. The release suite includes a new database regression confirming that reporter-owned reports are removed, other members' report text survives with cleared references, resolved reports remain, and completed deletion receipts survive Auth deletion. These are synthetic local checks, not hosted acceptance; no hosted member content was read.
+
+Privacy approval and technical acceptance need separate sign-offs. Backend restoration, hosted RLS/grants/Storage inspection, final-origin Auth/email and compromised-password checks, physical-device passkey acceptance (or reviewed disabling), deployed two-account acceptance and production-origin verification remain open. A privacy approval does not close any of them. A green build or mergeability flag does not approve publication.
+
+Provider/reference checks accessed November 6, 2026:
+
+- [Supabase backups](https://supabase.com/docs/guides/platform/backups): availability is plan/configuration dependent; database backups exclude Storage objects. This is vendor documentation, not a backup inventory for this project.
+- [Supabase SMTP](https://supabase.com/docs/guides/auth/auth-smtp): default-mail restrictions and external-user delivery requirements. This does not identify the configured WONDER sender.
+- [Texas Attorney General privacy overview](https://www.texasattorneygeneral.gov/consumer-protection/file-consumer-complaint/consumer-privacy-rights/texas-data-privacy-and-security-act): notice/request/consent requirements and exemptions need an applicability determination; this review makes no legal-compliance certification.

@@ -22,7 +22,8 @@ Record the final HTTPS origin, Git SHA, production deployment ID, Supabase proje
 | Password protection | Supabase leaked-password protection enabled and a deliberately known compromised test password rejected at signup and reset. Verify the provider configuration; the app's minimum-length rule is not this control. |
 | Passkeys, if offered | Physical iPhone/Safari plus a second supported device: enrollment, sign-in, cancellation, removal, password fallback, reset/recovery, and old-credential rejection at the final origin. |
 | Deployed product | Two isolated ordinary accounts complete the matrix below through Vercel, Auth, database and Storage. Operators use a separate authorized account. |
-| Operations and notice | Named operator and backup accept the queues; signed-out support channel is monitored; final notice names email/model providers and verified retention/backup practice. |
+| Privacy publication | [BETA-PRIVACY-REVIEW.md](BETA-PRIVACY-REVIEW.md) decisions closed; responsible entity and tested signed-out contact approved; actual email service and retention/backup practices verified; final notice approved with effective date. Name a model provider only if one is actually enabled. |
+| Operating coverage | Primary, backup and technical responder accept queue checks, privacy requests, deletion retries and incident response; access and absence handoff tested; earlier human-review scope explicitly reconciled. Privacy wording alone is not coverage. |
 
 ## Authentication setup
 
@@ -52,7 +53,7 @@ Use fictional adult profiles A and B, separate browser contexts and owned inboxe
 | Privacy boundaries | B cannot fetch A's journey, journal, assessment, report or unauthorized photo by guessing IDs. An ordinary account cannot open operations. |
 | Stale state | Changes in preferences, permissions or availability invalidate stale proposed actions. Pausing stops new introductions. |
 | Block/report | Block immediately closes contact; no pair recycling; report enters restricted queue and operator can resolve it. |
-| Export/deletion | Export includes the intended test account only. Password-confirmed deletion denies old session access, removes active rows and photographs, and closes connection access. Exercise pending-deletion retry safely in staging. |
+| Export/deletion | Export includes the intended test account only; omissions (connection messages/plans, photo bytes, operational/provider records) are disclosed and a manual request route exists. Password-confirmed deletion denies old session access after receipt creation, removes linked rows and photographs, and removes the stored connection for both participants. Test the surviving receipt, reporter-owned report deletion and retained third-party report text separately. Exercise pending-deletion retry safely in staging. |
 | AI unavailable | Saved report, correction, journal and introductions work while conversational AI is explicitly unavailable. No external model is silently called. |
 
 Record any failure with the action, expected result, observed result, deployment SHA and reproduction steps. Stop invitations on any authorization/privacy failure or unreliable account recovery. After deletion, confirm cleanup for both test identities without retaining their private content in the report.
@@ -61,7 +62,9 @@ Record any failure with the action, expected result, observed result, deployment
 
 Assign an owner and backup for portrait review, cohort membership, support/abuse reports, pending deletions, service availability and incident response. A database role alone is not operational coverage. For the first cohort, schedule explicit queue checks and communicate the response window actually staffed. Confirm an accessible support email or monitored invitation reply address for people who cannot sign in.
 
-The expanded `/privacy` copy is a prepared product disclosure. Before publishing, finalize the monitored contact, email provider, retention durations for deleted/replaced photos and security/support records, backup availability/expiry, and restore/deletion handling. The source alone cannot establish these operating practices. Do not promise immediate backup erasure or validated compatibility.
+The expanded `/privacy` copy is a draft, not an approved notice. Use [BETA-PRIVACY-REVIEW.md](BETA-PRIVACY-REVIEW.md) for the evidence matrix, proposed operator coverage, retention inventory and publication decisions. Finalize the public responsible entity/contact, email service, category-specific retention, backup/file-copy inventory and restore/deletion procedure. The source establishes some event-based deletion behavior; it cannot establish provider settings or staffing. Do not invent expiry periods, promise immediate backup erasure or claim validated compatibility.
+
+Keep three distinct outcomes: privacy publication approval, staffed operating acceptance, and technical deployment/security acceptance. None substitutes for another. The source offers photo and cohort review, not approval of every introduction or sensitive Mirror claim. Resolve that difference from earlier governance requirements before invitations. Pause stops new introductions but does not alone stop an existing mutual connection; disabling cohort membership is not an emergency service-wide suspension.
 
 Start with a small operator-managed group, for example 6-10 invited Dallas adults with reciprocal preferences. Self-reflection can work in a sparse cohort; introductions require eligible reciprocal candidates. Cohort membership gates introductions, not signup. If the entire application must be invite-only, add a server-enforced registration allowlist and review direct Supabase signup access separately.
 

@@ -24,5 +24,17 @@ await db.query("select wonder_accept_proposal($1,$2,1,'{}')",[a,proposal]);await
 // An answer changed on a second device cannot overwrite the first silently.
 const session='40000000-0000-4000-8000-000000000001';await db.query("insert into assessment_sessions values($1,$2,'in_progress')",[session,a]);
 await db.query("select wonder_save_answer($1,$2,'first','1',null)",[a,session]);await assert.rejects(()=>db.query("select wonder_save_answer($1,$2,'first','2',null)",[a,session]));await db.query("select wonder_save_answer($1,$2,'first','2','1')",[a,session]);
+// Privacy disclosure: deletion removes the reporter's own reports but preserves
+// reports by other members, including free text, after subject/pair references clear.
+await db.query('insert into wonder_support_requests(reporter_id,subject_id,connection_id,reason) values($1,$2,$3,$4),($2,$1,$3,$5)',[a,b,id,'Report submitted by A','Report about A: identifying text can remain']);
+await db.query('insert into wonder_account_deletions(user_id) values($1)',[a]);
 await db.query('delete from auth.users where id=$1',[a]);assert.equal((await db.query('select * from wonder_passkeys')).rows.length,0);assert.equal((await db.query('select * from wonder_private_journey where user_id=$1',[a])).rows.length,0);assert.equal((await db.query('select * from wonder_connections')).rows.length,0);assert.equal((await db.query('select * from assessment_responses_v2')).rows.length,0);
+const retainedReports=(await db.query('select reporter_id,subject_id,connection_id,reason from wonder_support_requests')).rows;
+assert.deepEqual(retainedReports,[{reporter_id:b,subject_id:null,connection_id:null,reason:'Report about A: identifying text can remain'}]);
+await db.query("update wonder_support_requests set status='resolved'");
+assert.equal((await db.query('select count(*)::int as count from wonder_support_requests')).rows[0].count,1);
+await db.query("update wonder_account_deletions set status='complete',completed_at=now() where user_id=$1",[a]);
+const receipt=(await db.query('select user_id,status,requested_at,completed_at from wonder_account_deletions where user_id=$1',[a])).rows[0];
+assert.equal(receipt.user_id,a);assert.equal(receipt.status,'complete');assert.ok(receipt.requested_at);assert.ok(receipt.completed_at);
+console.log('PASS: deletion removes reporter-owned reports; third-party report text and completed deletion receipt remain.');
 await db.close();console.log('PASS: actual PostgreSQL RLS with two isolated identities; no cross-account reads, no anonymous access, direct writes denied, stale write rejected, deleted state inaccessible.');})().catch(e=>{console.error(e);process.exitCode=1;});
